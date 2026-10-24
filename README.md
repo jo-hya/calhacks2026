@@ -21,21 +21,22 @@ npm run preview
 
 ## What works
 
-- Responsive overview with monthly totals and category budgets.
+- Mobile-first spending feed and budget dashboard based on the Figma Codex page, with purple styling, Poppins typography, and locally stored design assets.
+- Persistent bottom navigation for Home, Budgets, quick actions, Activity, and Profile. Larger screens keep the same narrow mobile layout.
 - Category details, searchable/filterable transactions, and manual expense entry.
 - Budget transfers with a review/confirmation step, validation, expiration, stale-state checks, and duplicate-action protection within the local demo.
 - Adjustment history, browser-local persistence, and demo reset.
 - Keyboard-accessible dialogs and mobile navigation.
 
-The demo uses **October 2026** and a fictional user, Jamie Parker. It starts with $38 remaining in dining and $60 in shopping. Moving $20 from shopping to dining leaves $58 and $40 respectively. Total allocation and transaction spending stay unchanged.
+The demo uses **October 2026** and a fictional user, Jamie Parker. It starts with $38 remaining in Dining and $60 in Clothing (the stable `shopping` category ID). Moving $20 from Clothing to Dining leaves $58 and $40 respectively. Total allocation and transaction spending stay unchanged. Existing saved purchases and Groceries are preserved; amounts are calculated from the demo data rather than copied from Figma's illustrative figures. Native phone status and gesture bars are left to the device.
 
 ## Demo walkthrough
 
-1. Open Overview and select **Make room for dinner**.
-2. Review a $20 transfer from Shopping to Dining. No allocation changes before confirmation.
-3. Confirm the transfer. Dining shows $58 left, Shopping shows $40, and Activity records the adjustment.
-4. Reload to verify persistence. Use **Reset demo** to restore the original scenario.
-5. On Transactions, add an expense to see category spending and remaining amounts update.
+1. On Home, tap the notification bell, then **Make room for dinner**.
+2. Review a $20 transfer from Clothing to Dining. No allocation changes before confirmation.
+3. Confirm the transfer. Budgets shows $58 left in Dining and $40 in Clothing; Activity records the adjustment.
+4. Reload to verify persistence. Profile → **Reset demo** restores the original scenario.
+5. Tap the center **+** → **Add a purchase** to update the feed and category spending. Home → **View all** opens searchable transactions.
 
 ## Implementation boundaries
 
