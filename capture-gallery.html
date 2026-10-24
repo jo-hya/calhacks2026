@@ -1,0 +1,28 @@
+﻿<!doctype html><html><head><meta charset="utf-8"><title>Pocket mobile screens</title><link rel="stylesheet" href="/src/styles.css"><style>
+body{background:#f7f6f4;padding:40px;width:1870px;color:#3d1d46}.gallery{display:grid;grid-template-columns:repeat(4,402px);gap:60px 60px}.screen-label{font:500 18px Poppins;margin:0 0 14px}.screen{width:402px;height:874px;overflow:hidden;position:relative;transform:translateZ(0);background:#3d1d46}.screen .app-shell{min-height:874px}.screen .bottom-nav{position:absolute;height:80px;padding-bottom:20px}.screen main{padding-top:35px}.screen .feed-surface{min-height:568px}.screen .content-surface{min-height:630px}.screen .modal{position:absolute;display:block;max-height:849px;z-index:100}.screen .shade{position:absolute;inset:0;background:#180c27a6;backdrop-filter:blur(4px);z-index:90}.screen .toast-region{position:absolute}.screen .skip-link{display:none}#source{position:absolute;left:-10000px;top:0;width:402px;height:874px;border:0}h1.gallery-title{font-size:32px;margin-bottom:12px}.gallery-description{font-size:14px;margin-bottom:40px}
+</style></head><body><h1 class="gallery-title">Pocket · Mobile app</h1><p class="gallery-description">Implemented screens and demo flow · 402 × 874</p><div class="gallery" id="gallery"></div><iframe id="source"></iframe><script type="module">
+import {createSeed} from '/src/lib/budget.js';
+const iframe=document.querySelector('#source');const old=localStorage.getItem('pocket.demo.v1');
+const pause=()=>new Promise(r=>setTimeout(r,180));
+async function go(hash){iframe.src='/?captureScreen='+Date.now()+'#'+hash;await new Promise(r=>iframe.onload=r);for(let i=0;i<100&&!iframe.contentDocument.querySelector('.app-shell');i++)await pause();if(!iframe.contentDocument.querySelector('.app-shell'))throw Error('App did not load: '+iframe.contentDocument.body.innerText);await iframe.contentDocument.fonts.ready;await pause();}
+async function click(selector){const el=iframe.contentDocument.querySelector(selector);if(!el)throw Error(selector);el.click();await pause();}
+async function button(text){const el=[...iframe.contentDocument.querySelectorAll('button')].find(b=>b.textContent.trim()===text);if(!el)throw Error(text);el.click();await pause();}
+async function snap(title){const doc=iframe.contentDocument;await Promise.all([...doc.images].map(i=>i.decode().catch(()=>{})));const article=document.createElement('article');article.innerHTML='<h2 class="screen-label"></h2><div class="screen"></div>';article.querySelector('h2').textContent=title;const slot=article.querySelector('.screen');const clone=doc.querySelector('.app-shell').cloneNode(true);clone.querySelectorAll('.toast-region').forEach(n=>n.remove());clone.querySelectorAll('input').forEach((n,i)=>n.setAttribute('value',doc.querySelectorAll('input')[i]?.value||''));clone.querySelectorAll('select').forEach((n,i)=>{const v=doc.querySelectorAll('select')[i].value;[...n.options].forEach(o=>o.selected=o.value===v);});const dialog=clone.querySelector('dialog');if(dialog){dialog.remove();const shade=document.createElement('div');shade.className='shade';slot.appendChild(clone);slot.appendChild(shade);const sheet=document.createElement('div');sheet.className='modal';sheet.innerHTML=dialog.innerHTML;slot.appendChild(sheet);}else slot.appendChild(clone);document.querySelector('#gallery').appendChild(article);}
+try{localStorage.setItem('pocket.demo.v1',JSON.stringify(createSeed()));
+await go('overview');await snap('01 · Home');
+await go('budgets');await snap('02 · Budgets');
+await go('transactions');await snap('03 · Transactions');
+await go('profile');await snap('04 · Profile');
+await go('overview');await click('[aria-label="Dinner suggestion"]');await snap('05 · Dinner suggestion');
+await button('Make room for dinner');await snap('06 · Move budget');
+await button('Review transfer');await snap('07 · Review transfer');
+await button('Confirm transfer');await go('activity');await snap('08 · Confirmed activity');
+await go('budgets');await click('.budget-card');await snap('09 · Category detail');
+await go('overview');await click('[aria-label="Add to your pocket"]');await snap('10 · Quick actions');
+await click('.action-options button');await snap('11 · Add a purchase');
+await go('profile');await button('Reset demo');await snap('12 · Reset demo');
+document.body.dataset.ready='true'; const captureScript=document.createElement('script');captureScript.src='https://mcp.figma.com/mcp/html-to-design/capture.js';captureScript.async=true;document.head.appendChild(captureScript);
+}catch(e){document.body.dataset.error=e.message;document.querySelector('.gallery-description').textContent=e.message;}finally{if(old===null)localStorage.removeItem('pocket.demo.v1');else localStorage.setItem('pocket.demo.v1',old);iframe.remove();}
+</script></body></html>
+
+

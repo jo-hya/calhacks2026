@@ -1,0 +1,6 @@
+{
+  "appId": "com.pocket.budget",
+  "appName": "Pocket",
+  "webDir": "dist",
+  "android": { "backgroundColor": "#3d1d46" }
+}

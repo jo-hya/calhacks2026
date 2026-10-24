@@ -1,3 +1,5 @@
+> **Latest implementation update:** The scripted SMS + Nessie rehearsal is now implemented; see [phone-demo.md](docs/phone-demo.md) for verified behavior, setup and limitations. Older phase statuses below predate this work. Fetch.ai/Claude and Supabase remain unconnected.
+
 # pocket — Phased Build Plan & Team Handoff
 
 **Cal Hacks 13.0 · Updated October 24, 2026 · Primary demo: forwarded dinner invitation · Notification-free core**

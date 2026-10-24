@@ -11,3 +11,14 @@
 @media(prefers-reduced-motion:reduce){*,*::before,*::after{animation:none!important;transition:none!important;scroll-behavior:auto!important}}
 /* Keep small labels from inheriting the large amount's line box. */
 .balance-amount>span{line-height:14.4px}.feed-row>span:last-child{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+
+.text-demo > p { line-height: 1.6; }
+.text-demo blockquote { margin: 20px 0; padding: 16px; background: #f2eaf2; border-radius: 16px; }
+.text-transcript { display: grid; gap: 12px; margin: 24px 0; }
+.text-bubble { padding: 14px; border-radius: 18px; background: #f2eaf2; margin-right: 18px; overflow-wrap: anywhere; }
+.text-bubble.from-you { margin-left: 18px; margin-right: 0; background: #7f5679; color: white; }
+.text-bubble p { margin: 8px 0 0; line-height: 1.5; }
+.text-actions { display: grid; gap: 10px; margin-bottom: 24px; }
+.text-demo .button { white-space: normal; }
+.install-pocket { margin: 0 18px 12px; }
+.install-help { background: #fff; color: #3d1d46; border-radius: 18px; padding: 12px 18px; font-size: 14px; line-height: 1.6; }

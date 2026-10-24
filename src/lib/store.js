@@ -1,4 +1,6 @@
-import { createSeed, isValidState, confirmTransfer, addExpense } from './budget.js';
+import { createSeed, isValidState, confirmTransfer, addExpense, proposeTransfer } from './budget.js';
+
+export const connected = Boolean(window.__POCKET_CONNECTED__);
 
 export const STORAGE_KEY = 'pocket.demo.v1';
 let snapshot = createSeed();
@@ -17,7 +19,21 @@ function load() {
     return snapshot;
   }
 }
-snapshot = load();
+snapshot = connected ? createSeed() : load();
+if (connected) warning = 'Connecting to your shared Pocket budget...';
+
+async function request(path, body) {
+  const response = await fetch(`/api/${path}`, { method: body ? 'POST' : 'GET', headers: body ? { 'Content-Type': 'application/json' } : {}, body: body && JSON.stringify(body) });
+  const result = await response.json();
+  if (!response.ok) throw new Error(result.error || 'Pocket could not connect.');
+  return result;
+}
+function publish(next) { snapshot = next; warning = next.connectionWarning || ''; listeners.forEach(listener => listener()); }
+async function remote(path, body) { const next = await request(path, body); publish(next); return next; }
+async function refresh() {
+  try { await remote('state'); } catch (error) { warning = error.message; snapshot = { ...snapshot }; listeners.forEach(listener => listener()); }
+}
+if (connected) { refresh(); setInterval(refresh, 3000); }
 
 function commit(next) {
   try {
@@ -31,6 +47,7 @@ function commit(next) {
 }
 
 window.addEventListener('storage', event => {
+  if (connected) return;
   if (event.key === STORAGE_KEY || event.key === null) {
     snapshot = load();
     listeners.forEach(listener => listener());
@@ -43,7 +60,10 @@ export const store = {
   subscribe(listener) { listeners.add(listener); return () => listeners.delete(listener); },
   getSnapshot: () => snapshot,
   getWarning: () => warning,
-  transfer(proposal) { commit(confirmTransfer(warning ? snapshot : load(), proposal)); },
-  addExpense(expense) { commit(addExpense(warning ? snapshot : load(), expense)); },
-  reset() { commit(createSeed()); },
+  async propose(input) { return connected ? request('proposal', input) : proposeTransfer(snapshot, input); },
+  async transfer(proposal) { if (connected) return remote('transfer', { id: proposal.id }); commit(confirmTransfer(warning ? snapshot : load(), proposal)); },
+  async addExpense(expense) { if (connected) return remote('expense', expense); commit(addExpense(warning ? snapshot : load(), expense)); },
+  async reset() { if (connected) return remote('reset', {}); commit(createSeed()); },
+  message(text) { return remote('message', { text }); },
+  sync() { return remote('sync', {}); },
 };
