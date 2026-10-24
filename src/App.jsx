@@ -2,6 +2,8 @@ import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import { CATEGORIES, DEMO_DATE, money, parseMoney, getBudgets, getTotals, proposeTransfer } from './lib/budget.js';
 import { store } from './lib/store.js';
 
+const asset = name => `/figma/${name}`;
+function Asset({ name, className = '' }) { return <img className={className} src={asset(name)} alt="" aria-hidden="true" />; }
 const paths = {
   pocket: <><path d="M5 4h14v10c0 5-7 8-7 8s-7-3-7-8V4Z" /><path d="m9 10 3 3 3-3" /></>,
   grid: <><rect x="3" y="3" width="7" height="7" rx="1.5" /><rect x="14" y="3" width="7" height="7" rx="1.5" /><rect x="3" y="14" width="7" height="7" rx="1.5" /><rect x="14" y="14" width="7" height="7" rx="1.5" /></>,
@@ -31,36 +33,13 @@ function Icon({ name, size = 20, ...props }) {
   return <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.65" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" {...props}>{paths[name] || paths.wallet}</svg>;
 }
 
+
 function CategoryIcon({ category, small = false }) {
-  return <span className={`category-icon ${small ? 'small' : ''}`} style={{ background: category.tint, color: category.color }}><Icon name={category.icon} size={small ? 18 : 22} /></span>;
+  const files = { dining: 'dining.png', shopping: 'clothing.png', transport: 'transport.png' };
+  return <span className={`category-icon ${small ? 'small' : ''}`}><Asset name={small ? 'feed-circle.svg' : 'category-circle.svg'} className="circle-art" />{files[category.id] ? <Asset name={files[category.id]} className={`category-art ${category.id}`} /> : <Icon name="basket" size={16} />}</span>;
 }
-
-function DinnerIllustration() {
-  return <svg className="dinner-illustration" viewBox="0 0 180 150" fill="none" aria-hidden="true">
-    <path d="M17 126c33-12 113-10 148 0" stroke="#dccbad" strokeWidth="2" />
-    <ellipse cx="96" cy="78" rx="53" ry="52" fill="#e8dbc3" />
-    <circle cx="91" cy="72" r="49" fill="#fffdf5" stroke="#d6c6aa" strokeWidth="2" />
-    <circle cx="91" cy="72" r="36" stroke="#e4d8c1" strokeWidth="2" />
-    <path d="M71 73c-3-17 29-25 33-8 4 14-25 17-22 5 3-9 28-8 28 6 0 12-27 18-35 7-8-10 15-22 25-14" stroke="#d9ae60" strokeWidth="5" strokeLinecap="round" />
-    <path d="M92 54c-13-11-18-7-14 0 3 4 10 3 14 0ZM94 55c1-14 12-18 13-8 0 5-8 8-13 8Z" fill="#7e9361" />
-    <circle cx="75" cy="87" r="4" fill="#c67e5e" /><circle cx="108" cy="83" r="4" fill="#c67e5e" />
-    <path d="M25 32v29c0 8 12 8 12 0V32M31 32v82M151 32v82m0-82c-13 8-13 35 0 35" stroke="#8c997c" strokeWidth="3" strokeLinecap="round" />
-    <path d="m137 17 3-8m5 14 8-3M45 21l-5-7" stroke="#bda276" strokeWidth="2" strokeLinecap="round" />
-  </svg>;
-}
-
-const NAV = [{ id: 'overview', label: 'Overview', icon: 'grid' }, { id: 'budgets', label: 'Budgets', icon: 'wallet' }, { id: 'transactions', label: 'Transactions', icon: 'receipt' }, { id: 'activity', label: 'Activity', icon: 'activity' }];
-const titles = {
-  overview: ['A little clarity. A lot more living.', 'A thoughtful look at where your money is going.'],
-  budgets: ['Make room for what matters.', 'Your categories, your priorities. A little flexibility goes a long way.'],
-  transactions: ['The little things add up.', 'A clear view of your everyday spending.'],
-  activity: ['Every adjustment, in one place.', 'Follow the small changes you make to your monthly budget.'],
-};
-
-function initialPage() {
-  const hash = window.location.hash.slice(1);
-  return NAV.some(n => n.id === hash) ? hash : 'overview';
-}
+const NAV = [{ id: 'overview', label: 'Home', asset: 'home.svg' }, { id: 'budgets', label: 'Budgets', asset: 'pie.svg' }, { id: 'activity', label: 'Activity', asset: 'clock.svg' }, { id: 'profile', label: 'Profile', asset: 'user.svg' }];
+function initialPage() { const hash = window.location.hash.slice(1); return [...NAV.map(n => n.id), 'transactions'].includes(hash) ? hash : 'overview'; }
 
 export default function App() {
   const state = useSyncExternalStore(store.subscribe, store.getSnapshot);
@@ -73,77 +52,51 @@ export default function App() {
   const totals = getTotals(state);
   const dining = budgets.find(b => b.id === 'dining');
   const mainRef = useRef(null);
-
-  useEffect(() => {
-    const handleHash = () => setPage(initialPage());
-    window.addEventListener('hashchange', handleHash);
-    return () => window.removeEventListener('hashchange', handleHash);
-  }, []);
+  useEffect(() => { const handler = () => setPage(initialPage()); window.addEventListener('hashchange', handler); return () => window.removeEventListener('hashchange', handler); }, []);
   useEffect(() => { if (toast) { const id = setTimeout(() => setToast(''), 5000); return () => clearTimeout(id); } }, [toast]);
-
-  function navigate(id, category = 'all') {
-    setPage(id); setFilter(category); setSearch(''); window.location.hash = id;
-    mainRef.current?.focus({ preventScroll: true });
-    window.scrollTo({ top: 0, behavior: 'instant' });
-  }
+  function navigate(id, category = 'all') { setPage(id); setFilter(category); setSearch(''); window.location.hash = id; mainRef.current?.focus({ preventScroll: true }); window.scrollTo({ top: 0, behavior: 'instant' }); }
   function complete(message) { setModal(null); setToast(message); }
   const warning = store.getWarning();
-
-  return <div className="app-shell">
+  const navItem = item => <a key={item.id} href={`#${item.id}`} aria-label={item.label} title={item.label} aria-current={page === item.id ? 'page' : undefined} className={`nav-item ${page === item.id ? 'active' : ''}`} onClick={e => { e.preventDefault(); navigate(item.id); }}><Asset name={item.asset} /></a>;
+  return <div className={`app-shell page-${page}`}>
     <a className="skip-link" href="#main-content">Skip to content</a>
-    <aside className="sidebar">
-      <a className="brand" href="#overview" aria-label="Pocket home"><span className="brand-mark"><Icon name="pocket" size={28} /></span>pocket<span className="brand-dot">.</span></a>
-      <span className="nav-label">YOUR EVERYDAY MONEY</span>
-      <nav aria-label="Main navigation">{NAV.map(item => <a key={item.id} href={`#${item.id}`} className={`nav-item ${page === item.id ? 'active' : ''}`} aria-current={page === item.id ? 'page' : undefined} onClick={e => { e.preventDefault(); navigate(item.id); }}><Icon name={item.icon} /><span>{item.label}</span>{page === item.id && <span className="nav-dot" />}</a>)}</nav>
-      <div className="sidebar-bottom"><div className="sidebar-note"><Icon name="leaf" size={24} /><p>A little intention.<br />More possibilities.</p><span>Build habits that feel like you.</span></div>
-      <button className="reset-button" onClick={() => setModal({ type: 'reset' })}><Icon name="reset" size={17} />Reset demo</button>
-      <div className="profile"><span className="avatar">J</span><div><strong>Jamie Parker</strong><span>Personal demo account</span></div><span className="profile-dot" /></div></div>
-    </aside>
-
-    <div className="main-shell">
-      <header className="topbar"><div className="breadcrumb">My pocket <span>/</span> <strong>{NAV.find(n => n.id === page).label}</strong></div><div className="topbar-right"><span className="demo-badge"><span />Demo workspace</span><span className="mobile-avatar">J</span><span className="topbar-date"><Icon name="calendar" size={16} />October 2026</span></div></header>
-      <main id="main-content" ref={mainRef} tabIndex={-1}>
-        {warning && <div className="warning" role="alert"><Icon name="info" />{warning}</div>}
-        <section className="page-heading"><div><div className="eyebrow">{page === 'overview' ? 'YOUR MONTH AT A GLANCE' : `YOUR ${page.toUpperCase()}`}</div><h1>{titles[page][0]}</h1><p>{titles[page][1]}</p></div><button className="button primary" onClick={() => setModal({ type: page === 'transactions' ? 'expense' : 'transfer' })}><Icon name={page === 'transactions' ? 'plus' : 'transfer'} size={18} />{page === 'transactions' ? 'Add expense' : 'Move budget'}</button></section>
-
-        {(page === 'overview' || page === 'budgets') && <>
-          <div className="hero-grid">
-            <section className="balance-card" aria-label="Monthly budget summary"><div className="balance-top"><span><span className="light-dot" />YOUR ROOM TO SPEND</span><span className="month-label">OCT 01 — OCT 31</span></div><div className="balance-amount">{money(totals.remaining)}<span>left this month</span></div><p className="balance-caption">A budget for your life. With room to enjoy it.</p><div className="total-progress" role="progressbar" aria-label="Monthly budget spent" aria-valuenow={Math.round(totals.spent / totals.limit * 100)} aria-valuemin={0} aria-valuemax={Math.max(100, Math.round(totals.spent / totals.limit * 100))}>{budgets.map(b => <span key={b.id} style={{ width: `${Math.max(0, b.spent / Math.max(totals.limit, totals.spent) * 100)}%`, background: b.color }} />)}</div><div className="balance-stats"><div><span>Total budget</span><strong>{money(totals.limit)}</strong></div><div><span>Spent so far</span><strong>{money(totals.spent)}</strong></div><div><span>Budget remaining</span><strong>{Math.round(totals.remaining / totals.limit * 100)}%</strong></div></div><span className="balance-decoration" aria-hidden="true"><Icon name="pocket" size={185} /></span></section>
-            <section className="dinner-card"><div className="eyebrow"><Icon name="spark" size={15} />LIFE HAPPENS. MAKE ROOM.</div><div className="dinner-body"><div><h2>Dinner with<br />your people?</h2><p>A $55 plan.<br />{money(dining.remaining)} in your dining pocket.</p></div><DinnerIllustration /></div><div className={`dinner-insight ${dining.remaining >= 5500 ? 'covered' : ''}`}><Icon name={dining.remaining >= 5500 ? 'check' : 'info'} size={16} /><span>{dining.remaining >= 5500 ? 'This fits your dining budget.' : `${money(5500 - dining.remaining)} more would cover the plan.`}</span></div><button className="dinner-link" onClick={() => dining.remaining >= 5500 ? navigate('transactions', 'dining') : setModal({ type: 'transfer', from: 'shopping', to: 'dining', amount: '20' })}>{dining.remaining >= 5500 ? 'Explore your dining spending' : 'Make room for dinner'}<Icon name="arrow" size={18} /></button></section>
-          </div>
-
-          <section className="budgets-section"><div className="section-heading"><div><h2>Your pockets <span className="count">04</span></h2><p>A place for every part of your life.</p></div>{page === 'overview' ? <button className="text-button" onClick={() => navigate('budgets')}>View budgets <Icon name="arrow" size={17} /></button> : <span className="muted-meta">Monthly allocations · USD</span>}</div><div className="budget-grid">{budgets.map(b => <button key={b.id} className="budget-card" onClick={() => setModal({ type: 'category', category: b.id })} aria-label={`View ${b.name} budget, ${money(b.remaining)} remaining`}><div className="budget-card-top"><CategoryIcon category={b} /><Icon name="chevron" size={16} /></div><h3>{b.name}</h3><div className={`budget-remaining ${b.remaining < 0 ? 'negative' : ''}`}>{money(Math.abs(b.remaining))}<span>{b.remaining < 0 ? 'over budget' : 'left'}</span></div><div className="category-progress"><span style={{ width: `${Math.min(100, b.limit ? b.spent / b.limit * 100 : 100)}%`, background: b.color }} /></div><div className="budget-card-footer"><span>{money(b.spent)} spent</span><span>of {money(b.limit)}</span></div></button>)}</div></section>
-        </>}
-
-        {page === 'overview' && <div className="lower-grid"><section className="panel"><div className="section-heading"><h2>Recent transactions</h2><button className="text-button" onClick={() => navigate('transactions')}>View all <Icon name="arrow" size={16} /></button></div><TransactionList transactions={[...state.transactions].sort((a, b) => b.date.localeCompare(a.date)).slice(0, 4)} compact /></section><section className="panel activity-panel"><div className="section-heading"><h2>A little flexibility</h2><span className="mini-icon"><Icon name="transfer" size={17} /></span></div>{state.adjustments.length ? <ActivityList adjustments={state.adjustments.slice(0, 2)} /> : <div className="activity-intro"><div className="flexibility-art" aria-hidden="true"><span><Icon name="bag" size={24} /></span><Icon name="transfer" size={22} /><span><Icon name="dining" size={24} /></span></div><h3>Plans change. Your budget can too.</h3><p>Move a little between pockets without changing your total monthly budget.</p></div>}<button className="text-button activity-cta" onClick={() => state.adjustments.length ? navigate('activity') : setModal({ type: 'transfer' })}>{state.adjustments.length ? 'See all adjustments' : 'Make your first adjustment'}<Icon name="arrow" size={17} /></button></section></div>}
-
-        {page === 'budgets' && <section className="budget-explainer"><span className="explainer-icon"><Icon name="leaf" size={27} /></span><div><h3>Flexible pockets. One monthly plan.</h3><p>Moving budget changes your category allocations. Your spending stays the same, and no money moves between bank accounts.</p></div><button className="button secondary" onClick={() => navigate('activity')}>View adjustments<Icon name="arrow" size={17} /></button></section>}
-
-        {page === 'transactions' && <section className="panel transaction-panel"><div className="transaction-toolbar"><label className="search-input"><Icon name="search" size={18} /><input aria-label="Search transactions" placeholder="Search a merchant…" value={search} onChange={e => setSearch(e.target.value)} /></label><label className="filter-select"><span className="sr-only">Filter by category</span><select value={filter} onChange={e => setFilter(e.target.value)}><option value="all">All categories</option>{CATEGORIES.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}</select></label></div><TransactionList transactions={[...state.transactions].filter(t => (filter === 'all' || t.category === filter) && t.merchant.toLowerCase().includes(search.toLowerCase())).sort((a, b) => b.date.localeCompare(a.date))} /><div className="list-footnote">Demo transactions · October 2026 · All amounts in USD</div></section>}
-
-        {page === 'activity' && <section className="panel full-activity"><div className="section-heading"><h2>Budget adjustments</h2><span className="muted-meta">{state.adjustments.length} confirmed</span></div>{state.adjustments.length ? <ActivityList adjustments={state.adjustments} /> : <div className="empty-state"><span className="empty-icon"><Icon name="transfer" size={30} /></span><h3>A fresh start for your pockets.</h3><p>Once you confirm a budget move, you’ll see exactly what changed here.</p><button className="button primary" onClick={() => setModal({ type: 'transfer' })}>Move budget<Icon name="arrow" size={17} /></button></div>}</section>}
-
-        <footer className="page-footer"><span><Icon name="pocket" size={15} />Small steps. More possibilities.</span><span>Demo data · Saved in this browser</span><button className="mobile-reset" onClick={() => setModal({ type: 'reset' })}>Reset demo</button></footer>
-      </main>
-    </div>
-    <div className="toast-region" role="status" aria-live="polite">{toast && <div className="toast"><Icon name="check" size={18} />{toast}<button aria-label="Dismiss notification" onClick={() => setToast('')}><Icon name="close" size={16} /></button></div>}</div>
-    {modal && <Modal title={modal.type === 'transfer' ? 'Make a little room.' : modal.type === 'expense' ? 'Add an expense.' : modal.type === 'reset' ? 'A fresh start?' : `${CATEGORIES.find(c => c.id === modal.category).name} pocket`} onClose={() => setModal(null)}>
+    <div className="ambient" aria-hidden="true"><Asset name="glow.svg" className="glow glow-top" /><Asset name="glow.svg" className="glow glow-bottom" /></div>
+    <main id="main-content" ref={mainRef} tabIndex={-1}>
+      {warning && <div className="warning" role="alert">{warning}</div>}
+      {page === 'overview' && <>
+        <header className="home-header"><div className="welcome"><button className="avatar" aria-label="Open profile" onClick={() => navigate('profile')}><Asset name="avatar.svg" /><span>J</span></button><div><p>Welcome back,</p><strong>Jamie</strong></div><button className="notification-button" aria-label="Dinner suggestion" onClick={() => setModal({ type: 'dinner' })}><Asset name="notification.png" /><Asset name="notification-dot.svg" className="notification-dot" /></button></div><div className="monthly-spending"><h1>Monthly Spending</h1><div><strong>{money(totals.spent)}</strong><span>/ {money(totals.limit)}</span></div></div></header>
+        <section className="feed-surface" aria-label="Recent spending"><SpendingFeed transactions={state.transactions} onEdit={() => navigate('transactions')} /></section>
+      </>}
+      {page === 'budgets' && <div className="budget-screen"><h1 className="sr-only">Your budgets</h1><section className="balance-card" aria-label="Monthly budget summary"><span className="month-label"><Asset name="month-chevron.svg" />OCT 2026</span><div className="balance-amount">{money(totals.remaining)}<span>left this month</span></div><div className="total-progress" role="progressbar" aria-label="Monthly budget spent" aria-valuenow={Math.round(totals.spent / totals.limit * 100)} aria-valuemin={0} aria-valuemax={Math.max(100, Math.round(totals.spent / totals.limit * 100))}>{budgets.map(b => <span key={b.id} style={{ width: `${b.spent / Math.max(totals.limit, totals.spent) * 100}%`, background: b.color }} />)}</div><div className="balance-stats"><div><span>Total budget</span><strong>{money(totals.limit)}</strong></div><div><span>Spent so far</span><strong>{money(totals.spent)}</strong></div><div><span>Budget remaining</span><strong>{Math.round(totals.remaining / totals.limit * 100)}%</strong></div></div></section><section className="budget-list" aria-label="Budget categories">{budgets.map(b => <button className="budget-card" key={b.id} onClick={() => setModal({ type: 'category', category: b.id })} aria-label={`View ${b.name} budget, ${money(b.remaining)} remaining`}><div className="budget-card-top"><CategoryIcon category={b} /><h2>{b.name}</h2><Asset name="category-chevron.svg" className="category-chevron" /></div><div className="budget-remaining"><strong>{money(Math.abs(b.remaining))}</strong> {b.remaining < 0 ? 'over budget' : 'left'}</div><div className="category-progress"><span style={{ width: `${Math.min(100, b.limit ? b.spent / b.limit * 100 : 100)}%`, background: b.color }} /></div><div className="budget-card-footer"><span>{money(b.spent)} spent</span><span>of {money(b.limit)}</span></div></button>)}</section><button className="button light full-width" onClick={() => setModal({ type: 'transfer' })}><Icon name="transfer" />Move budget</button></div>}
+      {page === 'transactions' && <><PageHeading title="Your spending" subtitle="The little things, all in one place." /><section className="content-surface"><div className="transaction-toolbar"><label className="search-input"><span className="sr-only">Search transactions</span><input placeholder="Search a merchant…" value={search} onChange={e => setSearch(e.target.value)} /></label><label><span className="sr-only">Filter by category</span><select value={filter} onChange={e => setFilter(e.target.value)}><option value="all">All categories</option>{CATEGORIES.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}</select></label></div><TransactionList transactions={state.transactions.filter(t => (filter === 'all' || t.category === filter) && t.merchant.toLowerCase().includes(search.toLowerCase())).sort((a,b) => b.date.localeCompare(a.date))} /><button className="button primary full-width" onClick={() => setModal({ type: 'expense' })}><Icon name="plus" />Add expense</button></section></>}
+      {page === 'activity' && <><PageHeading title="Your activity" subtitle="A little flexibility goes a long way." /><section className="content-surface"><h2>Budget adjustments</h2>{state.adjustments.length ? <ActivityList adjustments={state.adjustments} /> : <div className="empty-state"><Icon name="transfer" size={32} /><h3>A fresh start.</h3><p>Your confirmed budget moves will appear here.</p></div>}<button className="button primary full-width" onClick={() => setModal({ type: 'transfer' })}>Move budget<Icon name="transfer" /></button></section></>}
+      {page === 'profile' && <><PageHeading title="Your pocket" subtitle="Make room for what matters." /><section className="content-surface profile-panel"><span className="profile-avatar">J</span><h2>Jamie Parker</h2><p>Personal demo account</p><button className="settings-row" onClick={() => navigate('transactions')}>All transactions<Icon name="chevron" /></button><button className="settings-row" onClick={() => setModal({ type: 'dinner' })}>Make room for dinner<Icon name="chevron" /></button><button className="settings-row" onClick={() => setModal({ type: 'reset' })}>Reset demo<Icon name="reset" /></button><p className="modal-footnote">October 2026 · USD<br />Demo data saved on this device.</p></section></>}
+    </main>
+    <nav className="bottom-nav" aria-label="Main navigation">{NAV.slice(0,2).map(navItem)}<button className="add-button" aria-label="Add to your pocket" onClick={() => setModal({ type: 'actions' })}><Asset name="plus.svg" /></button>{NAV.slice(2).map(navItem)}</nav>
+    <div className="toast-region" role="status" aria-live="polite">{toast && <div className="toast"><Icon name="check" />{toast}<button aria-label="Dismiss notification" onClick={() => setToast('')}><Icon name="close" /></button></div>}</div>
+    {modal && <Modal title={modal.type === 'transfer' ? 'Make a little room.' : modal.type === 'expense' ? 'Add an expense.' : modal.type === 'reset' ? 'A fresh start?' : modal.type === 'actions' ? 'A little more possibility.' : modal.type === 'dinner' ? 'Dinner with your people?' : `${CATEGORIES.find(c => c.id === modal.category).name} pocket`} onClose={() => setModal(null)}>
+      {modal.type === 'actions' && <div className="action-options"><button onClick={() => setModal({ type: 'expense' })}><Icon name="plus" /><span><strong>Add a purchase</strong><small>Record something your pocket missed.</small></span><Icon name="chevron" /></button><button onClick={() => setModal({ type: 'transfer' })}><Icon name="transfer" /><span><strong>Move budget</strong><small>Make room between your categories.</small></span><Icon name="chevron" /></button></div>}
+      {modal.type === 'dinner' && <><p className="modal-description">A $55 plan. {money(dining.remaining)} in your dining pocket.</p><div className="transfer-review"><Icon name="dining" size={38} /><h3>{dining.remaining >= 5500 ? 'You have room for dinner.' : `${money(5500 - dining.remaining)} more would cover it.`}</h3><p>Your total monthly budget stays the same.</p></div><button className="button primary full-width" onClick={() => dining.remaining >= 5500 ? (setModal(null), navigate('transactions', 'dining')) : setModal({ type: 'transfer', from: 'shopping', to: 'dining', amount: '20' })}>{dining.remaining >= 5500 ? 'View dining spending' : 'Make room for dinner'}<Icon name="arrow" /></button></>}
       {modal.type === 'transfer' && <TransferForm state={state} initial={modal} onComplete={complete} />}
       {modal.type === 'expense' && <ExpenseForm onComplete={complete} />}
-      {modal.type === 'reset' && <><p className="modal-description">Restore the original October demo budgets and transactions. This clears the expenses and budget adjustments you added in this browser.</p><div className="reset-summary"><span>Dining remaining<strong>$38</strong></span><span>Shopping remaining<strong>$60</strong></span></div><div className="modal-actions"><button className="button secondary" onClick={() => setModal(null)}>Keep my changes</button><button className="button primary" onClick={() => { store.reset(); complete('Demo reset. Your pockets are ready for a fresh start.'); }}>Reset demo</button></div></>}
+      {modal.type === 'reset' && <><p className="modal-description">Restore the starting October budgets and transactions. This clears the expenses and adjustments you added on this device.</p><div className="reset-summary"><span>Dining remaining<strong>$38</strong></span><span>Clothing remaining<strong>$60</strong></span></div><div className="modal-actions"><button className="button secondary" onClick={() => setModal(null)}>Keep changes</button><button className="button primary" onClick={() => { store.reset(); complete('Your pockets are ready for a fresh start.'); }}>Reset demo</button></div></>}
       {modal.type === 'category' && <CategoryDetail category={budgets.find(b => b.id === modal.category)} state={state} onTransfer={() => setModal({ type: 'transfer', to: modal.category, from: modal.category === 'shopping' ? 'dining' : 'shopping' })} onTransactions={() => { setModal(null); navigate('transactions', modal.category); }} />}
     </Modal>}
   </div>;
 }
-
-function TransactionList({ transactions, compact = false }) {
-  if (!transactions.length) return <div className="empty-state small-empty"><Icon name="search" size={28} /><h3>No matching transactions.</h3><p>Try another merchant or category.</p></div>;
-  return <div className={`transaction-list ${compact ? 'compact' : ''}`}>{!compact && <div className="transaction-table-head"><span>Merchant</span><span>Category</span><span>Date</span><span>Amount</span></div>}{transactions.map(t => {
-    const category = CATEGORIES.find(c => c.id === t.category);
-    return <div className="transaction-row" key={t.id}><div className="merchant-cell"><CategoryIcon category={category} small /><div><strong>{t.merchant}</strong><span>{compact ? category.name : 'Demo expense'}</span></div></div>{!compact && <span className="category-tag" style={{ background: category.tint, color: category.color }}>{category.name}</span>}<span className="transaction-date">{new Date(`${t.date}T12:00:00`).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</span><strong className="transaction-amount">−{money(t.amountCents, true)}</strong></div>;
-  })}</div>;
+function PageHeading({ title, subtitle }) { return <header className="page-heading"><h1>{title}</h1><p>{subtitle}</p></header>; }
+function FeedIcon({ transaction }) {
+  let name = transaction.category === 'shopping' || transaction.category === 'groceries' ? 'feed-shopping.png' : transaction.category === 'transport' ? (/Lyft/i.test(transaction.merchant) ? 'feed-car.png' : 'feed-ticket.png') : /coffee/i.test(transaction.merchant) ? 'feed-coffee.png' : 'feed-dining.png';
+  return <span className="feed-icon"><Asset name="feed-circle.svg" /><Asset name={name} className={`feed-art ${name.replace('.png','')}`} /></span>;
 }
-
+function SpendingFeed({ transactions, onEdit }) {
+  const grouped = Object.groupBy([...transactions].sort((a,b) => b.date.localeCompare(a.date)), t => t.date);
+  return Object.entries(grouped).map(([date, items], i) => <section className="feed-day" key={date}><div className="feed-day-heading"><h2>{date === DEMO_DATE ? 'Today' : date === '2026-10-23' ? 'Yesterday' : date === '2026-10-22' ? '2 Days Ago' : new Date(`${date}T12:00:00`).toLocaleDateString('en-US', { month:'short', day:'numeric' })}</h2>{i === 0 && <button onClick={onEdit}>View all</button>}</div>{items.map(t => <div className="feed-row" key={t.id}><FeedIcon transaction={t} /><p>Spent <strong>{money(t.amountCents)}</strong> at <strong>{t.merchant}</strong>.</p><span>{CATEGORIES.find(c => c.id === t.category).name}</span></div>)}</section>);
+}
+function TransactionList({ transactions }) {
+  if (!transactions.length) return <div className="empty-state"><Icon name="search" size={28} /><h3>No matching transactions.</h3><p>Try another merchant or category.</p></div>;
+  return <div className="transaction-list">{transactions.map(t => <div className="transaction-row" key={t.id}><FeedIcon transaction={t} /><div className="merchant-cell"><strong>{t.merchant}</strong><span>{new Date(`${t.date}T12:00:00`).toLocaleDateString('en-US', { month:'short', day:'numeric' })} · {CATEGORIES.find(c => c.id === t.category).name}</span></div><strong className="transaction-amount">−{money(t.amountCents, true)}</strong></div>)}</div>;
+}
 function ActivityList({ adjustments }) {
   return <div className="activity-list">{adjustments.map(a => <div className="activity-row" key={a.id}><span className="activity-icon"><Icon name="transfer" size={18} /></span><div><strong>{money(a.amountCents)} moved to {CATEGORIES.find(c => c.id === a.to).name.toLowerCase()}</strong><p>From {CATEGORIES.find(c => c.id === a.from).name.toLowerCase()} · Allocation adjustment</p><time dateTime={a.createdAt}>{new Date(a.createdAt).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}</time></div><span className="confirmed"><Icon name="check" size={12} />Confirmed</span></div>)}</div>;
 }

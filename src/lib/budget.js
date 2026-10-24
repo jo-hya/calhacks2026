@@ -1,10 +1,10 @@
 export const PERIOD = '2026-10';
 export const DEMO_DATE = '2026-10-24';
 export const CATEGORIES = [
-  { id: 'dining', name: 'Dining', icon: 'dining', color: '#b78a4c', tint: '#f5ead7', description: 'Good food, good company' },
-  { id: 'shopping', name: 'Shopping', icon: 'bag', color: '#9681ae', tint: '#eee8f4', description: 'A few things just for you' },
-  { id: 'groceries', name: 'Groceries', icon: 'basket', color: '#7d9561', tint: '#ebf0df', description: 'The everyday essentials' },
-  { id: 'transport', name: 'Transport', icon: 'train', color: '#6c91a5', tint: '#e5eef3', description: 'Places to be, people to see' },
+  { id: 'dining', name: 'Dining', icon: 'dining', color: '#7f5679', tint: '#f2eaf2', description: 'Good food, good company' },
+  { id: 'shopping', name: 'Clothing', icon: 'bag', color: '#ad7ca6', tint: '#f2eaf2', description: 'A few things just for you' },
+  { id: 'transport', name: 'Transportation', icon: 'train', color: '#cf93c7', tint: '#f2eaf2', description: 'Places to be, people to see' },
+  { id: 'groceries', name: 'Groceries', icon: 'basket', color: '#f2ace8', tint: '#f2eaf2', description: 'The everyday essentials' },
 ];
 
 export function createSeed() {
