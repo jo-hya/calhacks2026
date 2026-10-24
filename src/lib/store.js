@@ -65,5 +65,6 @@ export const store = {
   async addExpense(expense) { if (connected) return remote('expense', expense); commit(addExpense(warning ? snapshot : load(), expense)); },
   async reset() { if (connected) return remote('reset', {}); commit(createSeed()); },
   message(text) { return remote('message', { text }); },
+  async location(position) { const result = await remote('location', position); return result.location; },
   sync() { return remote('sync', {}); },
 };

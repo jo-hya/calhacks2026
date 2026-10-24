@@ -1,8 +1,9 @@
 # Pocket phone rehearsal
 
-This is a single-user, scripted demo. Bandwidth sends real SMS to the configured
-verified phone. Nessie supplies actual sandbox API purchase records. Fetch.ai / Claude
-reasoning is not connected: `server/conversation.mjs` is the temporary responder.
+This is a single-user demo. Bandwidth sends real SMS to the configured
+verified phone. Nessie supplies actual sandbox API purchase records. With
+`ANTHROPIC_API_KEY` set, the Claude agent answers (see [Claude agent](claude-agent.md));
+without it, `server/conversation.mjs` is the scripted responder described below.
 
 ## Start
 
@@ -94,10 +95,10 @@ both share the same budget, so an intervening change invalidates an older review
 
 ## Teammate handoff and limitations
 
-`respond(data, text, channel)` currently recognizes the $55 dinner scenario and
-exact approval commands. Replace its conversational interpretation with the
-Fetch.ai agent, retaining server-owned proposals and explicit confirmation.
-Do not call the scripted responder a completed Fetch.ai or Claude integration.
+`respond(data, text, channel)` recognizes the $55 dinner scenario and exact approval
+commands. It is now the fallback when no `ANTHROPIC_API_KEY` is set; the Claude agent
+(`server/agent.mjs`) replaces it otherwise, keeping server-owned proposals and explicit
+confirmation.
 
 The paired app uses `/api/state`, `/api/sync`, `/api/message`, `/api/proposal`,
 `/api/transfer`, `/api/expense`, and `/api/reset`. These use a pairing cookie,

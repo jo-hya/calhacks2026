@@ -76,3 +76,26 @@ export async function seedNessie() {
   }
   console.log(`Nessie sandbox: ${created} demo purchases created; existing demo purchases preserved.`);
 }
+
+// Purchases the Claude agent pays for (an approved ALT). Tagged so a demo reset can remove them.
+const AGENT_TAG = 'pocket-agent:';
+
+export async function createAgentPurchase({ merchant, category, amountCents, date }) {
+  const a = await account();
+  const merchants = await nessie('/merchants');
+  const name = `Pocket demo - ${merchant}`;
+  let m = merchants.find(x => x.name === name && [x.category].flat().includes(category));
+  if (!m) {
+    m = (await nessie('/merchants', { name, category })).objectCreated;
+    if (!m?._id) throw new Error('Nessie did not return the created merchant.');
+  }
+  // The sandbox stores whole dollars; the agent already proposes whole-dollar amounts.
+  const result = await nessie(`/accounts/${a._id}/purchases`, { merchant_id: m._id, medium: 'balance', purchase_date: date, amount: Math.round(amountCents / 100), description: `${AGENT_TAG}${crypto.randomUUID()}`, status: 'completed' });
+  return result?.objectCreated?._id;
+}
+
+export async function deleteAgentPurchases() {
+  const a = await account();
+  const purchases = await nessie(`/accounts/${a._id}/purchases`);
+  for (const p of purchases) if (String(p.description || '').startsWith(AGENT_TAG)) await nessie(`/purchases/${p._id}`, undefined, 'DELETE');
+}

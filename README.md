@@ -11,10 +11,12 @@ See [phone rehearsal setup](docs/phone-demo.md). Run `npm run nessie:seed`,
 `npm run build`, and `npm run demo`, then `ngrok http 3002` in another terminal.
 Open the private pairing link printed by the server. **Try text flow** rehearses
 preset messages in the browser; texting **DINNER** from the verified phone runs
-real Bandwidth SMS with a scripted responder and shared app updates.
+real Bandwidth SMS with shared app updates.
 
-Nessie sandbox purchases drive the spending totals and replies. Fetch.ai / Claude
-reasoning is still a teammate integration; the current responder is deterministic.
+With `ANTHROPIC_API_KEY` set, replies come from a **Claude agent** that reasons over
+the Nessie purchases, offers cheaper alternatives (ALT) or a budget move (KEEP), pays
+approved alternatives through Nessie, and can text location heads-ups. See
+[Claude agent](docs/claude-agent.md). Without the key, a scripted responder answers.
 
 ## Run locally
 
@@ -61,7 +63,7 @@ The demo uses **October 2026** and a fictional user, Jamie Parker. It starts wit
 - `src/lib/budget.test.js`: budget invariants and failure-case tests.
 - `scripts/`: independent Bandwidth connectivity smoke tests. These are not the app backend; see [their instructions](scripts/BANDWIDTH.md).
 
-**This is a local demo, not a connected financial service.** The browser-only mode has no backend. The connected demo adds Nessie imports, shared file-backed state, private pairing, and scripted SMS-to-app updates; production login, Supabase and the AI agent are not implemented. No bank payments are made. localStorage does not provide secure authorization or atomic concurrent writes; production transfer checks and idempotency must live in the shared backend.
+**This is a local demo, not a connected financial service.** The browser-only mode has no backend. The connected demo adds Nessie imports, shared file-backed state, private pairing, SMS-to-app updates and the Claude agent; production login and Supabase are not implemented. No bank payments are made. localStorage does not provide secure authorization or atomic concurrent writes; production transfer checks and idempotency must live in the shared backend.
 
 The frontend needs no secrets and does not load the existing Bandwidth `.env` configuration. Never put server credentials in `VITE_` variables. Google Fonts are optional; local font fallbacks keep the app usable offline.
 

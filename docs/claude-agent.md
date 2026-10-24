@@ -1,0 +1,67 @@
+# Claude agent
+
+Pocket's texts are answered by a Claude agent (`server/agent.mjs`) when
+`ANTHROPIC_API_KEY` is set. Without it, the scripted responder in
+`server/conversation.mjs` answers as before.
+
+## Run it
+
+Add to `.env` (see `.env.example`):
+
+```
+ANTHROPIC_API_KEY=sk-ant-...
+```
+
+Then start the demo as usual (`npm run build`, `npm run demo`, `ngrok http 3002`).
+The server prints `Claude agent active`. Everything else (pairing, Nessie sync,
+the Android app, SMS webhook) is unchanged.
+
+## What it does
+
+Text Pocket anything from the verified phone, or use **Try text flow** in the app:
+
+1. **Forward the dinner invite.** The agent reads your budgets and Nessie purchases and
+   says how much room you have, e.g. "Dining has $38; the $55 dinner is $17 over",
+   then offers two paths:
+   - **KEEP**: go anyway, and it proposes moving money from a category with room.
+   - **ALT**: it searches the web for cheaper places near you (tell it your area,
+     e.g. "Berkeley 94704"), and if you pick one, proposes paying for it.
+2. **Reply YES** to approve. A KEEP move updates your budgets; an ALT payment is
+   created as a purchase in your Nessie sandbox account and imported like any other.
+   Nothing is charged for real.
+3. **Location heads-ups.** In **Try text flow**, *Share my location* reports where the
+   phone is while Pocket is open. When you arrive somewhere you'd spend (a restaurant,
+   a clothing store...), the agent texts you if that budget is tight. *Pretend I'm at...*
+   buttons trigger the same thing for a demo without walking anywhere. Places come from
+   OpenStreetMap; one text per place every 20 minutes.
+
+**Approval is enforced in code, not just the prompt.** The agent can only propose;
+`confirm_pending_action` refuses unless the user's own message (not a location update)
+arrived after the proposal, the action matches, it hasn't expired (30 minutes), and
+Nessie was refreshed for this turn. A failed Nessie payment records nothing.
+
+## Details
+
+- Replies are cleaned to plain ASCII and split into texts of at most 129 characters
+  (Bandwidth free trial limit; `POCKET_SMS_MAX_CHARS` raises it on a paid account).
+- Claude thinks outside the server's one-at-a-time queue, so the app stays responsive
+  during a reply; only the actual budget changes take turns.
+- If Claude can't be reached, the user gets "Pocket is having trouble connecting...
+  Nothing changed" instead of silence.
+- **Reset demo** also deletes the Nessie purchases the agent paid for.
+- `POCKET_MODEL` (default `claude-opus-5-5`), `POCKET_EFFORT` (default `medium`; `low`
+  replies faster), `POCKET_WEB_SEARCH=off` turns off web search.
+
+## Location limits
+
+Browsers and the app's web view only report location while Pocket is open on screen.
+Texting you while the phone is in your pocket needs a native background-location
+plugin in the Android build (and "Allow all the time"). That's a next step, not built yet.
+
+## iPhone
+
+The quickest way onto an iPhone needs no Xcode: open the pairing link through the
+ngrok HTTPS address in **Safari**, then **Share → Add to Home Screen** (the *Install
+Pocket* button explains this). It opens full screen like an app, and location works
+over HTTPS while it's open. A native iOS build (like the Android one) is possible with
+Capacitor but needs Xcode on a Mac and isn't set up yet.
