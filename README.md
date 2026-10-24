@@ -2,6 +2,20 @@
 
 A simple budget app for making room for everyday life. Built with React and Vite for Cal Hacks 13.0.
 
+## Connected SMS + Nessie demo
+
+For a real Android debug APK installed by USB, see [Android setup](docs/android-usb.md).
+The commands are `npm run android:build` and `npm run android:run` once the SDK is ready.
+
+See [phone rehearsal setup](docs/phone-demo.md). Run `npm run nessie:seed`,
+`npm run build`, and `npm run demo`, then `ngrok http 3002` in another terminal.
+Open the private pairing link printed by the server. **Try text flow** rehearses
+preset messages in the browser; texting **DINNER** from the verified phone runs
+real Bandwidth SMS with a scripted responder and shared app updates.
+
+Nessie sandbox purchases drive the spending totals and replies. Fetch.ai / Claude
+reasoning is still a teammate integration; the current responder is deterministic.
+
 ## Run locally
 
 Requires Node.js 22.18+ and npm.
@@ -47,7 +61,7 @@ The demo uses **October 2026** and a fictional user, Jamie Parker. It starts wit
 - `src/lib/budget.test.js`: budget invariants and failure-case tests.
 - `scripts/`: independent Bandwidth connectivity smoke tests. These are not the app backend; see [their instructions](scripts/BANDWIDTH.md).
 
-**This is a local demo, not a connected financial service.** There is no login, Supabase backend, Nessie import, AI agent, or SMS-to-app integration yet. No bank payments are made. localStorage does not provide secure authorization or atomic concurrent writes; production transfer checks and idempotency must live in the shared backend.
+**This is a local demo, not a connected financial service.** The browser-only mode has no backend. The connected demo adds Nessie imports, shared file-backed state, private pairing, and scripted SMS-to-app updates; production login, Supabase and the AI agent are not implemented. No bank payments are made. localStorage does not provide secure authorization or atomic concurrent writes; production transfer checks and idempotency must live in the shared backend.
 
 The frontend needs no secrets and does not load the existing Bandwidth `.env` configuration. Never put server credentials in `VITE_` variables. Google Fonts are optional; local font fallbacks keep the app usable offline.
 

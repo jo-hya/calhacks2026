@@ -148,3 +148,7 @@ vite.config.ts.timestamp-*
 
 # Turbo Repo
 .turbo
+.pocket/
+tmp/
+.android-tools/
+__pycache__/
