@@ -19,6 +19,8 @@ const MAX_HISTORY = 24;
 const MAX_AUDIO_BYTES = 5 * 1024 * 1024;
 const MAX_MEMORIES = 50;
 const TROUBLE = 'Lila is having trouble connecting. An approved action may have completed. Check the app before trying again.';
+// Everything Lila can search for: saved memories and purchases.
+const indexDocs = data => [...data.memories.map(memoryDoc), ...data.state.transactions.map(transactionDoc)];
 
 // `agent` is the Claude agent (on when ANTHROPIC_API_KEY is set); without it the scripted
 // responder in conversation.mjs answers, as before.
@@ -29,24 +31,19 @@ export function createDemoServer({ file = '.pocket/state.json', sync = syncNessi
   let data = initial || (existsSync(file) ? JSON.parse(readFileSync(file, 'utf8')) : { state: createSeed(), proposals: {}, messages: [], inbox: {}, outbox: [] });
   data = { ...data, agent: data.agent || { pending: null, history: [] }, memories: data.memories || [] };
   // Search covers what the user told Lila plus their purchases.
-  memoryIndex.upsert([...data.memories.map(memoryDoc), ...data.state.transactions.map(transactionDoc)]);
+  memoryIndex.sync(indexDocs(data));
   const lastNudge = new Map();
   let queue = Promise.resolve();
   let syncWarning = '';
   const serial = fn => { const result = queue.then(fn); queue = result.catch(() => {}); return result; };
-  function save(next) { writeFileSync(file + '.tmp', JSON.stringify(next)); renameSync(file + '.tmp', file); data = next; }
+  // Every save keeps the search index in step with the saved memories and purchases.
+  function save(next) { writeFileSync(file + '.tmp', JSON.stringify(next)); renameSync(file + '.tmp', file); data = next; memoryIndex.sync(indexDocs(next)); }
   function view() { return { ...data.state, connectionWarning: syncWarning, conversation: data.messages, pendingReply: agent ? (livePending() ? 'YES' : null) : data.proposals.simulation ? `YES ${data.proposals.simulation.code}` : null, agentEnabled: Boolean(agent), voiceEnabled: voice.enabled, memories: data.memories, smsStatus: data.outbox.slice(-5).map(o => ({ status: o.status, error: o.error })), phone: env.BANDWIDTH_PHONE_NUMBER || '', invitation: INVITATION }; }
   async function refresh() {
     try {
-      const before = data.state.transactions;
       const state = await sync(data.state);
       save({ ...data, state });
       syncWarning = '';
-      if (JSON.stringify(before) !== JSON.stringify(state.transactions)) {
-        const now = new Set(state.transactions.map(t => `tx:${t.id}`));
-        memoryIndex.remove(before.map(t => `tx:${t.id}`).filter(id => !now.has(id)));
-        memoryIndex.upsert(state.transactions.map(transactionDoc));
-      }
     }
     catch (error) { syncWarning = 'Nessie could not refresh. Showing the last saved purchases; text approvals require a fresh connection.'; throw error; }
   }
@@ -89,14 +86,12 @@ export function createDemoServer({ file = '.pocket/state.json', sync = syncNessi
       if (existing) return existing;
       const memory = { id: randomBytes(4).toString('hex'), text, createdAt: new Date().toISOString() };
       save({ ...data, memories: [...data.memories, memory].slice(-MAX_MEMORIES) });
-      memoryIndex.upsert([memoryDoc(memory)]);
       return memory;
     }),
     forget: id => serial(() => {
       const key = String(id).replace(/^mem:/, '');
       if (!data.memories.some(m => m.id === key)) return false;
       save({ ...data, memories: data.memories.filter(m => m.id !== key) });
-      memoryIndex.remove([`mem:${key}`]);
       return true;
     }),
     async applyPending(id) {
@@ -243,7 +238,6 @@ export function createDemoServer({ file = '.pocket/state.json', sync = syncNessi
             if (env.NESSIE_API_KEY) await clearAgentPurchases();
             const state = await sync(createSeed());
             // Keep processed SMS IDs and outbox so delayed callbacks cannot replay actions.
-            memoryIndex.remove(data.memories.map(m => `mem:${m.id}`));
             save({ ...data, state: { ...state, revision: data.state.revision + 1 }, proposals: {}, messages: [], agent: { pending: null, history: [] }, memories: [] });
             lastNudge.clear();
           } else if (url.pathname === '/api/expense') save({ ...data, state: addExpense(data.state, { ...input, source: 'manual' }) });

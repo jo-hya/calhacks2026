@@ -119,7 +119,10 @@ export function buildTools(ops, ctx) {
       name: 'forget_about_user',
       description: 'Delete a saved memory when the user asks you to forget it or it is no longer true. Use the id from [Lila remembers] or search_memory.',
       inputSchema: z.object({ memory_id: z.string() }),
-      run: async ({ memory_id }) => (await ops.forget(memory_id)) ? 'Forgotten.' : 'No memory with that id.',
+      run: async ({ memory_id }) => {
+        if (!ctx.canEditMemory) return 'Refused: only forget memories when the user asks in the app or by voice.';
+        return (await ops.forget(memory_id)) ? 'Forgotten.' : 'No memory with that id.';
+      },
     }),
     betaZodTool({
       name: 'search_memory',
@@ -157,7 +160,9 @@ async function withMemories(ops, query, content) {
 export async function runAgent({ ops, text, trigger = 'sms', location, bankFresh = true, client = new Anthropic() }) {
   // Approval only counts when the user's own latest message is just "yes" (voice transcripts
   // add a period, so "Yes." and "yes!" count too).
-  const ctx = { turnId: crypto.randomUUID(), userInitiated: trigger !== 'location', bankFresh, city: location?.city, region: location?.region,
+  // Texts can be forwarded from third parties, so only the app and voice may delete memories.
+  // Saving is still allowed from texts (it's how Lila learns preferences); the app shows every saved memory.
+  const ctx = { turnId: crypto.randomUUID(), userInitiated: trigger !== 'location', canEditMemory: trigger === 'simulation' || trigger === 'voice', bankFresh, city: location?.city, region: location?.region,
     approvedActionId: trigger !== 'location' && /^yes[.!]?$/i.test(text?.trim() ?? '') ? ops.pending()?.id : null };
   const base = trigger === 'location'
     ? `[Lila app location update, not a message from the user]\n${JSON.stringify(location)}\n\n${LOCATION_RULES}`

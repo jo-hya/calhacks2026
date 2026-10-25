@@ -26,6 +26,7 @@ test('Moss index: creates and loads the index, applies changes, queries locally'
     getIndex: async () => { calls.push('getIndex'); throw new Error('not found'); },
     createIndex: async (name, docs) => { calls.push(`createIndex:${name}:${docs.length}`); },
     loadIndex: async () => { calls.push('loadIndex'); },
+    getDocs: async () => [],
     addDocs: async (name, docs) => { calls.push(`addDocs:${docs.map(d => d.id).join(',')}`); },
     deleteDocs: async (name, ids) => { calls.push(`deleteDocs:${ids.join(',')}`); },
     query: async (name, q) => ({ docs: [{ id: 'about', text: 'x', metadata: { kind: 'about' } }, { id: 'mem:a', text: 'Vegetarian', metadata: { kind: 'memory' }, score: 0.9 }], query: q }),
@@ -48,9 +49,43 @@ test('memory tools only save what the user said', async () => {
   const saved = [];
   const ops = { remember: async fact => { saved.push(fact); return { id: 'm1', text: fact }; }, forget: async () => true, recall: async () => [] };
   const tool = (ctx, name) => buildTools(ops, ctx).find(t => t.name === name);
-  assert.match(await tool({ userInitiated: true }, 'remember_about_user').run({ fact: 'Vegetarian' }), /Remembered/);
-  assert.match(await tool({ userInitiated: false }, 'remember_about_user').run({ fact: 'Likes steak' }), /Refused/);
-  assert.deepEqual(saved, ['Vegetarian']);
+  assert.match(await tool({ userInitiated: true, canEditMemory: true }, 'remember_about_user').run({ fact: 'Vegetarian' }), /Remembered/);
+  assert.match(await tool({ userInitiated: false, canEditMemory: false }, 'remember_about_user').run({ fact: 'Likes steak' }), /Refused/);
+  // A text can teach Lila a preference, but a forwarded text must not delete memories.
+  assert.match(await tool({ userInitiated: true, canEditMemory: false }, 'remember_about_user').run({ fact: 'Likes tacos' }), /Remembered/);
+  assert.match(await tool({ userInitiated: true, canEditMemory: false }, 'forget_about_user').run({ memory_id: 'm1' }), /Refused/);
+  assert.deepEqual(saved, ['Vegetarian', 'Likes tacos']);
+});
+
+test('local index mirrors the saved data: evicted and reset docs are removed', async () => {
+  const index = createLocalIndex();
+  const memory = (id, text) => ({ id: `mem:${id}`, text, metadata: { kind: 'memory' } });
+  index.sync([memory('a', 'Vegetarian'), memory('b', 'Tahoe trip')]);
+  assert.equal((await index.search('vegetarian'))[0].id, 'mem:a');
+  index.sync([memory('b', 'Tahoe trip')]); // 'a' was evicted or forgotten
+  assert.equal(index.has('mem:a'), false);
+  assert.equal((await index.search('vegetarian')).length, 0);
+  index.sync([]); // reset
+  assert.deepEqual(index.ids(), []);
+});
+
+test('Moss search drops docs no longer saved and weak matches', async () => {
+  const client = {
+    getIndex: async () => ({}),
+    loadIndex: async () => {},
+    getDocs: async () => [],
+    addDocs: async () => {},
+    deleteDocs: async () => {},
+    query: async () => ({ docs: [
+      { id: 'mem:gone', text: 'Old', metadata: { kind: 'memory' }, score: 0.9 },
+      { id: 'mem:weak', text: 'Unrelated', metadata: { kind: 'memory' }, score: 0.05 },
+      { id: 'mem:a', text: 'Vegetarian', metadata: { kind: 'memory' }, score: 0.8 },
+    ] }),
+  };
+  const index = createMossIndex({ projectId: 'p', projectKey: 'k', client, logger: quiet });
+  await index.ready;
+  index.sync([{ id: 'mem:a', text: 'Vegetarian', metadata: { kind: 'memory' } }]);
+  assert.deepEqual((await index.search('food')).map(d => d.id), ['mem:a']);
 });
 
 async function server(t, { agent, voice } = {}) {
