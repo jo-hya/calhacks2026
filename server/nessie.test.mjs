@@ -5,6 +5,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { once } from 'node:events';
 import { createDemoServer } from './index.mjs';
+import { pairedCookie } from './test-helpers.mjs';
 import { createAgentPurchase, deleteAgentPurchases } from './nessie.mjs';
 
 test('uncertain Nessie payments reconcile after restart without another POST', async t => {
@@ -40,9 +41,10 @@ test('uncertain Nessie payments reconcile after restart without another POST', a
     const initial = app;
     app.server.listen(0, '127.0.0.1'); await once(app.server, 'listening');
     const { request } = await import('node:http');
+    const cookie = await pairedCookie(`http://127.0.0.1:${initial.server.address().port}`, initial.token);
     await new Promise((resolve, reject) => {
       const req = request(`http://127.0.0.1:${initial.server.address().port}/api/message`, {
-        method: 'POST', headers: { Cookie: `pocket=${initial.token}`, 'Content-Type': 'application/json' },
+        method: 'POST', headers: { Cookie: cookie, 'Content-Type': 'application/json' },
       }, res => { res.resume(); res.on('end', resolve); });
       req.on('error', reject); req.end(JSON.stringify({ text: 'hello' }));
     });

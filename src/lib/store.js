@@ -82,5 +82,6 @@ export const store = {
   },
   async ask(text, speak = true) { const result = await remote('voice/ask', { text, speak }); return result.voice; },
   forget(id) { return remote('memories/forget', { id }); },
+  confirmMemory(id) { return remote('memories/confirm', { id }); },
   sync() { return remote('sync', {}); },
 };

@@ -8,6 +8,7 @@ import { createSeed, getBudgets } from '../src/lib/budget.js';
 import { respond, INVITATION } from './conversation.mjs';
 import { importPurchases } from './nessie.mjs';
 import { createDemoServer } from './index.mjs';
+import { pairedCookie } from './test-helpers.mjs';
 const fresh = () => ({ state: createSeed(), proposals: {}, messages: [], inbox: {}, outbox: [] });
 
 test('scripted invitation, approval and replay change budget exactly once', () => {
@@ -60,8 +61,11 @@ test('HTTP auth, webhook sender checks, duplicate delivery and persistent SMS ac
   app.server.listen(0, '127.0.0.1'); await once(app.server, 'listening');
   t.after(async () => { await new Promise(r => app.server.close(r)); rmSync(dir, { recursive: true, force: true }); });
   const base = `http://127.0.0.1:${app.server.address().port}`;
-  const api = (path, value) => fetch(base + path, { method: value ? 'POST' : 'GET', headers: { Cookie: 'pocket=pair', 'Content-Type': 'application/json' }, body: value && JSON.stringify(value) });
+  const cookie = await pairedCookie(base, 'pair');
+  const api = (path, value) => fetch(base + path, { method: value ? 'POST' : 'GET', headers: { Cookie: cookie, 'Content-Type': 'application/json' }, body: value && JSON.stringify(value) });
   assert.equal((await fetch(base + '/api/state')).status, 401);
+  // The printed pairing token is not a session: only the cookie issued by pairing works.
+  assert.equal((await fetch(base + '/api/state', { headers: { Cookie: 'pocket=pair' } })).status, 401);
   assert.equal((await api('/api/transfer', { id: 'forged' })).status, 400);
   const event = (id, text, from = env.BANDWIDTH_VERIFIED_PHONE_NUMBER) => ({ type: 'message-received', message: { id, text, from, to: [env.BANDWIDTH_PHONE_NUMBER], applicationId: 'app' } });
   const post = events => fetch(base + '/webhooks/bandwidth?token=hook', { method: 'POST', body: JSON.stringify(events) });
@@ -96,7 +100,7 @@ test('callbacks arriving during provider work are acknowledged and retained', as
   await inFlight;
   assert.equal((await post('second')).status, 204);
   release(); await app.resume();
-  const state = await (await fetch(base + '/api/state', { headers: { Cookie: `pocket=${app.token}` } })).json();
+  const state = await (await fetch(base + '/api/state', { headers: { Cookie: await pairedCookie(base, app.token) } })).json();
   assert.equal(state.conversation.length, 4);
   assert.equal(state.smsStatus.filter(s => s.status === 'failed').length, 2);
 });
@@ -107,7 +111,7 @@ test('Nessie failure shows a warning and cannot confirm a prepared transfer', as
   app.server.listen(0, '127.0.0.1'); await once(app.server, 'listening');
   t.after(async () => { await new Promise(r => app.server.close(r)); rmSync(dir, { recursive: true, force: true }); });
   const base = `http://127.0.0.1:${app.server.address().port}`;
-  const headers = { Cookie: 'pocket=pair', 'Content-Type': 'application/json' };
+  const headers = { Cookie: await pairedCookie(base, 'pair'), 'Content-Type': 'application/json' };
   const proposal = await (await fetch(base + '/api/proposal', { method: 'POST', headers, body: JSON.stringify({ id: 'offline-review', from: 'shopping', to: 'dining', amountCents: 2000 }) })).json();
   const confirmation = await fetch(base + '/api/transfer', { method: 'POST', headers, body: JSON.stringify({ id: proposal.id }) });
   assert.equal(confirmation.status, 400);
