@@ -1,8 +1,67 @@
-> **Latest implementation update:** The scripted SMS + Nessie rehearsal is now implemented; see [phone-demo.md](docs/phone-demo.md) for verified behavior, setup and limitations. Older phase statuses below predate this work. Fetch.ai/Claude and Supabase remain unconnected.
+> **Latest implementation update (October 25, 2026):** The app is now named **Lila**. The SMS + Nessie rehearsal, a Claude agent, Cartesia voice, Moss memory, and an Android debug build are implemented. See the [Current status](#current-status-october-25-2026) below and [phone-demo.md](docs/phone-demo.md) / [claude-agent.md](docs/claude-agent.md) / [voice-memory.md](docs/voice-memory.md) for details. Phase checkboxes below predate this work unless marked. Supabase is still not connected.
 
-# pocket — Phased Build Plan & Team Handoff
+# pocket (Lila) — Phased Build Plan & Team Handoff
 
-**Cal Hacks 13.0 · Updated October 24, 2026 · Primary demo: forwarded dinner invitation · Notification-free core**
+**Cal Hacks 13.0 · Updated October 25, 2026 · Primary demo: forwarded dinner invitation · Notification-free core**
+
+## Current status (October 25, 2026)
+
+**Built and working (locally, with the demo server):**
+- React/Vite app (`src/`) with Overview, Budgets, Transactions, Activity, transfer review/confirm, manual expenses, reset, and browser-only fallback (`src/lib/store.js`).
+- Node server (`server/index.mjs`) that owns the shared state in `.pocket/state.json` (atomic file writes, serialized changes), serves the built app, and handles private pairing (cookie).
+- **Nessie** sandbox import: 12 labeled purchases for October 2026 with stable IDs and no duplicate imports. Import fails closed on unknown categories or provider errors (`server/nessie.mjs`, `scripts/seed-nessie.mjs`).
+- **Bandwidth SMS** inbound/outbound through the ngrok tunnel. Callbacks are validated and deduplicated, with replies persisted before side effects (`server/bandwidth.mjs`, `server/sms-text.mjs`).
+- **Claude agent** (`server/agent.mjs`, default model `claude-opus-5-5`) answers texts and app chat with tools for budgets, transactions, budget transfers, purchases, memory, and web search. Without `ANTHROPIC_API_KEY`, a scripted responder (`server/conversation.mjs`) answers instead.
+- **Voice** (`server/voice.mjs`): Cartesia speech-to-text and text-to-speech, on when `CARTESIA_API_KEY` is set.
+- **Memory** (`server/memory.mjs`): saved facts plus purchases, searchable through Moss when `MOSS_PROJECT_ID`/`MOSS_PROJECT_KEY` are set, with a local word-overlap fallback. Saved memories are capped at 50 and sent in the app state, but the UI does not display them yet.
+- **Android**: Capacitor debug APK (`com.pocket.budget`, app name Lila) that opens the same React app over USB (`docs/android-usb.md`).
+- **Tests:** `npm test` passes 55 tests (budget logic, callbacks, agent, voice/memory, demo flow).
+
+**Recently fixed on `voice-memory` (uncommitted at time of writing):**
+- Memory index stays in step with saved data. Evicted, forgotten, reset, manual-expense, and refreshed purchases are all reconciled on every save.
+- Moss setup retries; search drops removed docs and weak matches; startup removes stale Moss docs from earlier runs.
+- Texts can save memories; only the app and voice can delete them.
+- Client error handling for voice requests.
+
+**Verified live (previous sessions, per [phone-demo.md](docs/phone-demo.md)):** Bandwidth outbound, real Android inbound through ngrok, live Nessie read with the expected totals, and the $55 invitation → $20 transfer flow in the browser. A real-handset receipt of the new flow still needs a test.
+
+**Not yet verified:** Live Moss indexing and relevance thresholds, live Claude agent replies on the phone, live Cartesia voice on the Android build, and the memory fixes against real providers.
+
+**Not built:** Supabase and any production authentication (the pairing cookie is a single-user demo gate), authenticated server-side transfers with database transactions, multi-user data, group budgets, Visa merchant suggestions, x402 payments, and final submission artifacts.
+
+## Gaps to address before the demo
+
+1. **Identity and authorization:** A single pairing cookie gates everything. Anyone with the link on the same server instance has full access, and the pairing token changes on every restart.
+2. **Forwarded text as trusted context:** Texts can save memories and can carry an exact "yes" that approves a transfer. The app does not display memories, so a user can't see or remove a bad one. Show memories in the app, then tag provenance and confirm text-sourced facts.
+3. **Real-provider verification:** The memory and agent changes need a live run with Moss, Anthropic, and Cartesia keys. The 0.3 relevance threshold is a guess until tested.
+4. **Handset verification:** The new agent-driven SMS flow and the Android voice path haven't been tested on the phone.
+5. **Documentation drift:** `phone-demo.md` still cites 28 tests (now 55) and the README's "Next steps" point at Supabase only. Update both when the fixes are committed.
+6. **Demo reliability:** Keep the seed reset, ngrok, and Bandwidth callback URL in sync at demo time. Record a backup video of a full real-SMS run.
+
+## Next steps
+
+1. Commit the memory/agent fixes on `voice-memory` after reviewing the diff; open the PR against `main`.
+2. Run one live pass with `MOSS_*`, `ANTHROPIC_API_KEY`, and `CARTESIA_API_KEY` set: check recall quality, the 0.3 threshold, and a forwarded-invitation text end to end.
+3. Test the full SMS flow on the Android phone from a clean reset, including `CANCEL`, duplicate delivery, and an expired `YES <code>`.
+4. Decide whether text-sourced memories need confirmation before they reach future replies.
+5. If Supabase is still in scope for the prize story, start the schema and authenticated transfer work (Phase 2–3 below); otherwise document the file-backed state as the demo boundary.
+6. Update this checklist and `phone-demo.md` with the verified results, then prepare the backup recording and the architecture slide.
+
+## Tech stack and architecture
+
+- **Frontend:** React 19 + Vite 6, plain CSS (`src/styles.css`), wrapped in a Capacitor 8 Android shell. Browser-local demo mode when no server is present.
+- **Server:** Node 22.18+ ESM (`server/`), no framework. Plain `http` server, file-backed state, single process with a serialized work queue.
+- **Money and budgets:** Integer cents in pure functions (`src/lib/budget.js`) shared by the browser and server.
+- **External services:** Capital One **Nessie** (purchase data, sandbox), **Bandwidth** (SMS via a Build application, webhook through **ngrok**), **Anthropic** Claude (agent with tool use and server-side web search), **Cartesia** (Ink STT, Sonic TTS), **Moss** (semantic memory search).
+- **Data flow:** Nessie → import → saved state → budget math → agent tools. SMS/app/voice → `server/index.mjs` → agent → proposal → explicit approval → budget change in saved state → memory index sync.
+- **Safety model:** Proposals are server-owned with expiry and state checks; transfers only change category allocations, never bank money; approvals must match a live proposal code; SMS callbacks are deduplicated.
+- **Tests:** Node's built-in `node --test` (`npm test`).
+
+---
+
+## Original plan (predates the Lila/Claude work; retained for reference)
+
+**Cal Hacks 13.0 · Originally October 24, 2026 · Primary demo: forwarded dinner invitation · Notification-free core**
 
 > **Product vision:** Pocket helps college students and recent graduates make informed spending decisions **before** they buy. The intended connected experience lets a user forward an ordinary text about plans, ask financial questions, and—with explicit confirmation—adjust a budget grounded in app data. The basic app now works with local demo data; the connected SMS experience is still future work.
 >

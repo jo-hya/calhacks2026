@@ -69,7 +69,8 @@ export const store = {
   // Voice: a recording (or a tapped starter prompt) in; Lila's answer (+ MP3 unless speak is false) out.
   async voice(recording, speak = true) {
     const response = await fetch(`/api/voice?speak=${speak ? 1 : 0}`, { method: 'POST', headers: { 'Content-Type': recording.type || 'audio/webm' }, body: recording });
-    const result = await response.json();
+    // A proxy or tunnel error can return a non-JSON page, so only parse what we can read.
+    const result = await response.json().catch(() => ({}));
     if (!response.ok) throw new Error(result.error || 'Lila could not hear that.');
     publish(result);
     return result.voice;
