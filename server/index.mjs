@@ -467,7 +467,8 @@ export function createDemoServer({ file = '.pocket/state.json', sync = syncNessi
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
-  const app = createDemoServer();
+  // PAIR_TOKEN keeps the same pairing link across restarts; unset, a new random token is made each start.
+  const app = createDemoServer({ token: process.env.PAIR_TOKEN || undefined });
   try { await app.refresh(); } catch (error) {
     const saved = existsSync('.pocket/state.json') && JSON.parse(readFileSync('.pocket/state.json', 'utf8'));
     if (!saved?.state?.nessie) { console.error(error.message); process.exit(1); }
