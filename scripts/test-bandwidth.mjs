@@ -46,7 +46,7 @@ const message = {
   applicationId: env.BANDWIDTH_APPLICATION_ID,
   to: [env.BANDWIDTH_VERIFIED_PHONE_NUMBER],
   from: env.BANDWIDTH_PHONE_NUMBER,
-  text: "Pocket: You have $34 left for cafes. Reply ALT to see options.",
+  text: "Lila: You have $34 left for cafes. Reply ALT to see options.",
   tag: "pocket-first-test",
 };
 

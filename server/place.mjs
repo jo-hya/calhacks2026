@@ -14,7 +14,7 @@ export function categoryForKind(kind) {
 export async function lookupPlace(lat, lng, fetchImpl = fetch) {
   const url = new URL('https://nominatim.openstreetmap.org/reverse');
   for (const [k, v] of Object.entries({ format: 'jsonv2', lat, lon: lng, zoom: 18, addressdetails: 1 })) url.searchParams.set(k, v);
-  const response = await fetchImpl(url, { headers: { 'User-Agent': 'Pocket-CalHacks-demo/0.1', Accept: 'application/json' }, signal: AbortSignal.timeout(8000) });
+  const response = await fetchImpl(url, { headers: { 'User-Agent': 'Lila-CalHacks-demo/0.1', Accept: 'application/json' }, signal: AbortSignal.timeout(8000) });
   if (!response.ok) throw new Error(`Place lookup failed (${response.status}).`);
   const place = await response.json();
   const a = place.address || {};

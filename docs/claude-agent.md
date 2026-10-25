@@ -1,6 +1,6 @@
 # Claude agent
 
-Pocket's texts are answered by a Claude agent (`server/agent.mjs`) when
+Lila's texts are answered by a Claude agent (`server/agent.mjs`) when
 `ANTHROPIC_API_KEY` is set. Without it, the scripted responder in
 `server/conversation.mjs` answers as before.
 
@@ -18,7 +18,7 @@ the Android app, SMS webhook) is unchanged.
 
 ## What it does
 
-Text Pocket anything from the verified phone, or use **Try text flow** in the app:
+Text Lila anything from the verified phone, or use **Try text flow** in the app:
 
 1. **Forward the dinner invite.** The agent reads your budgets and Nessie purchases and
    says how much room you have, e.g. "Dining has $38; the $55 dinner is $17 over",
@@ -30,7 +30,7 @@ Text Pocket anything from the verified phone, or use **Try text flow** in the ap
    created as a purchase in your Nessie sandbox account and imported like any other.
    Nothing is charged for real.
 3. **Location heads-ups.** In **Try text flow**, *Share my location* reports where the
-   phone is while Pocket is open. When you arrive somewhere you'd spend (a restaurant,
+   phone is while Lila is open. When you arrive somewhere you'd spend (a restaurant,
    a clothing store...), the agent texts you if that budget is tight. *Pretend I'm at...*
    buttons trigger the same thing for a demo without walking anywhere. Places come from
    OpenStreetMap; one text per place every 20 minutes.
@@ -46,7 +46,7 @@ Nessie was refreshed for this turn. A failed Nessie payment records nothing.
   (Bandwidth free trial limit; `POCKET_SMS_MAX_CHARS` raises it on a paid account).
 - Claude thinks outside the server's one-at-a-time queue, so the app stays responsive
   during a reply; only the actual budget changes take turns.
-- If Claude can't be reached, the user gets "Pocket is having trouble connecting...
+- If Claude can't be reached, the user gets "Lila is having trouble connecting...
   Nothing changed" instead of silence.
 - **Reset demo** also deletes the Nessie purchases the agent paid for.
 - `POCKET_MODEL` (default `claude-opus-5-5`), `POCKET_EFFORT` (default `medium`; `low`
@@ -54,7 +54,7 @@ Nessie was refreshed for this turn. A failed Nessie payment records nothing.
 
 ## Location limits
 
-Browsers and the app's web view only report location while Pocket is open on screen.
+Browsers and the app's web view only report location while Lila is open on screen.
 Texting you while the phone is in your pocket needs a native background-location
 plugin in the Android build (and "Allow all the time"). That's a next step, not built yet.
 
@@ -62,6 +62,6 @@ plugin in the Android build (and "Allow all the time"). That's a next step, not 
 
 The quickest way onto an iPhone needs no Xcode: open the pairing link through the
 ngrok HTTPS address in **Safari**, then **Share → Add to Home Screen** (the *Install
-Pocket* button explains this). It opens full screen like an app, and location works
+Lila* button explains this). It opens full screen like an app, and location works
 over HTTPS while it's open. A native iOS build (like the Android one) is possible with
 Capacitor but needs Xcode on a Mac and isn't set up yet.

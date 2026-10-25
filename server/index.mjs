@@ -14,7 +14,7 @@ import { lookupPlace } from './place.mjs';
 const PENDING_TTL_MS = 30 * 60 * 1000;
 const NUDGE_COOLDOWN_MS = 20 * 60 * 1000;
 const MAX_HISTORY = 24;
-const TROUBLE = 'Pocket is having trouble connecting right now. Nothing changed. Please text me again in a minute.';
+const TROUBLE = 'Lila is having trouble connecting right now. Nothing changed. Please text me again in a minute.';
 
 // `agent` is the Claude agent (on when ANTHROPIC_API_KEY is set); without it the scripted
 // responder in conversation.mjs answers, as before.
@@ -94,7 +94,7 @@ export function createDemoServer({ file = '.pocket/state.json', sync = syncNessi
     let answer;
     try { answer = await agent({ ops, text, trigger: channel === 'sms' ? 'sms' : 'simulation', bankFresh: fresh }); }
     catch (error) { console.error('Agent error:', error.message); answer = TROUBLE; }
-    await log({ who: 'You', text, channel }, { who: 'Pocket', text: answer, channel });
+    await log({ who: 'You', text, channel }, { who: 'Lila', text: answer, channel });
     return answer;
   }
 
@@ -220,9 +220,9 @@ export function createDemoServer({ file = '.pocket/state.json', sync = syncNessi
     try { await serial(refresh); } catch { fresh = false; }
     let text;
     try { text = await agent({ ops, trigger: 'location', location: { lat, lng, ...where }, bankFresh: fresh }); }
-    catch (error) { console.error('Agent error:', error.message); lastNudge.delete(key); return { sent: false, reason: 'Pocket could not reach Claude.' }; }
+    catch (error) { console.error('Agent error:', error.message); lastNudge.delete(key); return { sent: false, reason: 'Lila could not reach Claude.' }; }
     if (!text || text === 'SKIP') return { sent: false, reason: 'Plenty of room in that budget.', place: where.place };
-    await log({ who: 'Pocket', text, channel: 'sms' });
+    await log({ who: 'Lila', text, channel: 'sms' });
     await queueTexts(`nudge-${randomBytes(4).toString('hex')}`, text);
     await serial(sendQueued);
     return { sent: true, place: where.place, text };
@@ -240,9 +240,9 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
   }
   app.server.listen(3002, '127.0.0.1', () => {
     writeFileSync('.pocket/device-link.json', JSON.stringify({ token: app.token, port: 3002 }));
-    console.log(`Pocket connected demo: http://127.0.0.1:3002/pair/${app.token}`);
+    console.log(`Lila connected demo: http://127.0.0.1:3002/pair/${app.token}`);
     console.log(`Phone: use your ngrok HTTPS host with /pair/${app.token}`);
-    console.log(process.env.ANTHROPIC_API_KEY ? 'Claude agent active. Text Pocket from your verified phone.' : 'Scripted responder active (no ANTHROPIC_API_KEY). Text DINNER from your verified phone.');
+    console.log(process.env.ANTHROPIC_API_KEY ? 'Claude agent active. Text Lila from your verified phone.' : 'Scripted responder active (no ANTHROPIC_API_KEY). Text DINNER from your verified phone.');
     app.resume().catch(() => console.error('Pending SMS could not be processed.'));
   });
 }

@@ -1,4 +1,4 @@
-# Pocket phone rehearsal
+# Lila phone rehearsal
 
 This is a single-user demo. Bandwidth sends real SMS to the configured
 verified phone. Nessie supplies actual sandbox API purchase records. With
@@ -42,9 +42,9 @@ The existing configuration matched the tunnel during setup; check it if the host
 ### Install on your home screen
 
 Open the private pairing link in Chrome (Android) or Safari (iPhone), then tap
-**Install Pocket**. Chrome can show its native installation prompt; otherwise
+**Install Lila**. Chrome can show its native installation prompt; otherwise
 the button shows the browser-specific home-screen instructions. The installed
-app has a Pocket icon and a standalone window. This is an installable web app,
+app has a Lila icon and a standalone window. This is an installable web app,
 not an App Store / Play Store release. It still needs this demo server and tunnel.
 Pairing lasts up to seven days while the same server instance is running. A
 restart changes the pairing token; reopen the newly printed pairing link.
@@ -54,13 +54,13 @@ The offline notice does not cache financial data or queue budget changes.
 1. In the paired app, Profile → Reset demo. Open **Try text flow**.
 2. From the verified phone, text `DINNER` to the Bandwidth number displayed there.
    Alternatively copy/forward: `Friends: Dinner tonight? $55 each. Can I fit this in my budget?`
-3. Pocket replies: `Dining: $38. $55 dinner is $17 over. Move $20 Clothing to Dining? Reply YES <code> or CANCEL.`
+3. Lila replies: `Dining: $38. $55 dinner is $17 over. Move $20 Clothing to Dining? Reply YES <code> or CANCEL.`
 4. Send the exact `YES <code>` from that reply within five minutes.
-5. Pocket confirms $58 Dining / $40 Clothing. Budgets and Activity update within
+5. Lila confirms $58 Dining / $40 Clothing. Budgets and Activity update within
    about three seconds in the app. This changes category allocation, not bank money.
 6. Reset from Profile to repeat. `CANCEL` / `KEEP` cancels the pending SMS proposal.
 
-This is forwarding from a group chat into a private Pocket conversation. Build
+This is forwarding from a group chat into a private Lila conversation. Build
 supports only the verified mobile recipient and SMS, not group MMS. Fetch.ai can
 later reason about the forwarded text; it does not remove the carrier restriction.
 
@@ -91,7 +91,7 @@ both share the same budget, so an intervening change invalidates an older review
 - Nessie is refreshed before each scripted exchange and transfer confirmation.
   Provider errors fail closed; a purchase import failure cannot authorize a transfer.
 - Account balance is not treated as a category budget. Budget reallocation is
-  stored by Pocket; it deliberately does not call Nessie's bank-transfer API.
+  stored by Lila; it deliberately does not call Nessie's bank-transfer API.
 
 ## Teammate handoff and limitations
 
@@ -115,7 +115,7 @@ Budget commits are retained on SMS failure. Inspect the app and start a fresh
 DINNER review rather than assuming a failed SMS rolled back a budget change.
 Build limits messages to ASCII, 129 custom characters, six/minute and 200/day.
 The default outbound callback can remain with Build; without delivery callbacks
-to Pocket, `accepted` does not prove handset delivery.
+to Lila, `accepted` does not prove handset delivery.
 
 ## Hackathon alignment
 
@@ -124,7 +124,7 @@ Reviewed `13.0 Hacker Guide.pdf` (sponsor tracks on pages 11–12) and
 and social-budget ideas). Nessie's stated criteria are completeness, creativity,
 and complexity. This implementation demonstrates a complete purchase-to-decision
 chain and a user-approved action visible in the app. It keeps the social context
-of a friend's invitation while discussing private financial data with Pocket.
+of a friend's invitation while discussing private financial data with Lila.
 
 The guide links to Fetch.ai's separate criteria and says sponsor prizes can change.
 This rehearsal does not itself establish eligibility for an AI/agent prize.

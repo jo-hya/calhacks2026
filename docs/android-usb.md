@@ -1,6 +1,6 @@
-# Run Pocket as an Android app over USB
+# Run Lila as an Android app over USB
 
-Pocket now has a Capacitor Android project (`com.pocket.budget`). The debug APK
+Lila now has a Capacitor Android project (`com.pocket.budget`). The debug APK
 opens the existing React app in an Android WebView and talks to the laptop's
 shared Nessie/SMS backend through `adb reverse`. No browser installation is needed.
 This is a development build, not a Play Store release or an offline banking app.
@@ -45,7 +45,7 @@ npm run android:build
 npm run android:run
 ```
 
-The runner forwards port 3002 over USB, installs the APK, and launches Pocket
+The runner forwards port 3002 over USB, installs the APK, and launches Lila
 already paired. The pairing code comes from ignored `.pocket/device-link.json`;
 it is passed only to the debug activity at launch and is not embedded in the APK.
 The API credentials remain on the laptop. Only `http://localhost:3002` is configured
@@ -54,7 +54,7 @@ in the development WebView. HTTP is enabled only in the debug manifest.
 Keep the cable connected and the backend running. After restarting the backend,
 rerun `npm run android:run` to pair again. After changing web UI code, run
 `npm run build` and relaunch the app; after changing native code, rebuild the APK.
-The browser Install Pocket button and service worker are disabled in the native app.
+The browser Install Lila button and service worker are disabled in the native app.
 
 APK location: `android/app/build/outputs/apk/debug/app-debug.apk`.
 If Android Studio is installed, `npm run android:open` opens the native project.

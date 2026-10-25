@@ -19,8 +19,8 @@ export default function InstallPocket() {
     finally { setPrompt(null); }
   }
   if (installed || Capacitor.isNativePlatform()) return null;
-  return <aside className="install-pocket" aria-label="Install Pocket">
-    <button className="button light full-width" onClick={install}>Install Pocket</button>
+  return <aside className="install-pocket" aria-label="Install Lila">
+    <button className="button light full-width" onClick={install}>Install Lila</button>
     {help && <div className="install-help"><p><strong>Android:</strong> Open this page in Chrome, then tap the menu and choose Install app or Add to Home screen.</p><p><strong>iPhone:</strong> Open this page in Safari, tap Share, then Add to Home Screen. Turn on Open as Web App if shown.</p><p>Open your private pairing link before installing. Keep the demo laptop running.</p></div>}
   </aside>;
 }

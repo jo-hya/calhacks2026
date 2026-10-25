@@ -33,5 +33,5 @@ export function respond(data, text, channel = 'simulation') {
       } catch { proposal = null; reply = 'Clothing has less than $20 available. Keep your budget and choose a cheaper dinner.'; }
     }
   } else reply = 'Scripted demo: send DINNER for the $55 invitation, then use the exact YES code in the review, or CANCEL.';
-  return { ...data, state, proposals: { ...data.proposals, [channel]: proposal }, messages: [...data.messages, { who: 'You', text, channel }, { who: 'Pocket (scripted)', text: reply, channel }].slice(-100), reply };
+  return { ...data, state, proposals: { ...data.proposals, [channel]: proposal }, messages: [...data.messages, { who: 'You', text, channel }, { who: 'Lila (scripted)', text: reply, channel }].slice(-100), reply };
 }

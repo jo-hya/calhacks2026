@@ -4,7 +4,7 @@ import { z } from 'zod';
 import { CATEGORIES, DEMO_DATE, money, getBudgets, getTotals } from '../src/lib/budget.js';
 import { SMS_MAX_CHARS } from './sms-text.mjs';
 
-// The Claude agent behind Pocket's texts. It replaces the scripted responder in
+// The Claude agent behind Lila's texts. It replaces the scripted responder in
 // conversation.mjs (which stays as the fallback when Claude can't be reached).
 // The server passes `ops`, its way of reading and changing the shared demo data.
 
@@ -12,8 +12,8 @@ const MODEL = process.env.POCKET_MODEL || 'claude-opus-5-5';
 const EFFORT = process.env.POCKET_EFFORT || 'medium';
 const Category = z.enum(CATEGORIES.map(c => c.id));
 
-const SYSTEM = `You are Pocket, a friendly personal-finance agent that texts with one user over SMS.
-Pocket's promise: tell the user how much they can comfortably spend *before* they buy, not after.
+const SYSTEM = `You are Lila, a friendly personal-finance agent that texts with one user over SMS.
+Lila's promise: tell the user how much they can comfortably spend *before* they buy, not after.
 
 Today is ${DEMO_DATE}. The budget period is October 2026. Budget categories (tool id: name the user sees): ${CATEGORIES.map(c => `${c.id}: ${c.name}`).join(', ')}. In messages, always use the name the user sees.
 
@@ -27,7 +27,7 @@ How you work:
 - If the user says no, CANCEL, or changes their mind, call cancel_pending_action.
 - Payments go through the user's Capital One Nessie sandbox account, which records whole dollars, so round prices to whole dollars. It's a sandbox: no real money moves. Don't claim otherwise.`;
 
-const LOCATION_RULES = `This turn was triggered by the Pocket app reporting where the user is, not by the user. Decide whether a proactive heads-up text is worth sending.
+const LOCATION_RULES = `This turn was triggered by the Lila app reporting where the user is, not by the user. Decide whether a proactive heads-up text is worth sending.
 Only nudge when the user is likely about to spend in a category that is tight or would go over. Don't nudge for places where they have plenty of room.
 If you nudge, check the budget, optionally propose the KEEP transfer up front so the user can approve with YES, and end with your SMS text.
 If no text is warranted, reply with exactly: SKIP`;
@@ -121,7 +121,7 @@ export function buildTools(ops, ctx) {
 export async function runAgent({ ops, text, trigger = 'sms', location, bankFresh = true, client = new Anthropic() }) {
   const ctx = { turnId: crypto.randomUUID(), userInitiated: trigger !== 'location', bankFresh, city: location?.city, region: location?.region };
   const userContent = trigger === 'location'
-    ? `[Pocket app location update, not a message from the user]\n${JSON.stringify(location)}\n\n${LOCATION_RULES}`
+    ? `[Lila app location update, not a message from the user]\n${JSON.stringify(location)}\n\n${LOCATION_RULES}`
     : text;
 
   const runner = client.beta.messages.toolRunner({

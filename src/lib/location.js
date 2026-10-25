@@ -1,8 +1,8 @@
 import { store } from './store.js';
 
-// Shares the phone's location with Pocket while the app is open, so the agent can text a
+// Shares the phone's location with Lila while the app is open, so the agent can text a
 // heads-up when you arrive somewhere you'd spend. Browsers (and the Android/iPhone web view)
-// only report location while Pocket is on screen, after the user allows it once.
+// only report location while Lila is on screen, after the user allows it once.
 const MIN_INTERVAL_MS = 60 * 1000;
 const MIN_MOVE_METERS = 75;
 let watchId = null;

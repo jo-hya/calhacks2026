@@ -13,7 +13,7 @@ export async function nessie(path, body, method = body ? 'POST' : 'GET') {
 export async function account() {
   const accounts = await nessie('/accounts');
   const selected = process.env.NESSIE_ACCOUNT_ID ? accounts.find(a => a._id === process.env.NESSIE_ACCOUNT_ID) : accounts.find(a => a.nickname === 'pocket');
-  if (!selected) throw new Error('Set NESSIE_ACCOUNT_ID to your Pocket sandbox account.');
+  if (!selected) throw new Error('Set NESSIE_ACCOUNT_ID to your Lila sandbox account.');
   return selected;
 }
 

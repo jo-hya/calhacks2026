@@ -67,7 +67,7 @@ export default function App() {
       {warning && <div className="warning" role="alert">{warning}</div>}
       <InstallPocket />
       {connected && page !== 'texts' && <button className="button light full-width" onClick={() => navigate('texts')}>Try text flow</button>}
-      {page === 'texts' && <><PageHeading title="Pocket texts" subtitle="Make room for plans with friends." /><TextDemo state={state} /></>}
+      {page === 'texts' && <><PageHeading title="Lila texts" subtitle="Make room for plans with friends." /><TextDemo state={state} /></>}
       {page === 'overview' && <>
         <header className="home-header"><div className="welcome"><button className="avatar" aria-label="Open profile" onClick={() => navigate('profile')}><Asset name="avatar.svg" /><span>J</span></button><div><p>Welcome back,</p><strong>Jamie</strong></div><button className="notification-button" aria-label="Dinner suggestion" onClick={() => setModal({ type: 'dinner' })}><Asset name="notification.png" /><Asset name="notification-dot.svg" className="notification-dot" /></button></div><div className="monthly-spending"><h1>Monthly Spending</h1><div><strong>{money(totals.spent)}</strong><span>/ {money(totals.limit)}</span></div></div></header>
         <section className="feed-surface" aria-label="Recent spending"><SpendingFeed transactions={state.transactions} onEdit={() => navigate('transactions')} /></section>
@@ -118,7 +118,7 @@ function Modal({ title, onClose, children }) {
     document.body.style.overflow = 'hidden';
     return () => { document.body.style.overflow = oldOverflow; dialog.close(); opener?.focus(); };
   }, []);
-  return <dialog ref={dialogRef} className="modal" aria-labelledby="modal-title" onCancel={e => { e.preventDefault(); onCloseRef.current(); }} onClick={e => { if (e.target === dialogRef.current) { const r = dialogRef.current.getBoundingClientRect(); if (e.clientX < r.left || e.clientX > r.right || e.clientY < r.top || e.clientY > r.bottom) onCloseRef.current(); } }}><div className="modal-inner"><div className="modal-heading"><span className="eyebrow">YOUR POCKET, YOUR CALL</span><button className="icon-button" onClick={onClose} aria-label="Close dialog"><Icon name="close" /></button></div><h2 id="modal-title">{title}</h2>{children}</div></dialog>;
+  return <dialog ref={dialogRef} className="modal" aria-labelledby="modal-title" onCancel={e => { e.preventDefault(); onCloseRef.current(); }} onClick={e => { if (e.target === dialogRef.current) { const r = dialogRef.current.getBoundingClientRect(); if (e.clientX < r.left || e.clientX > r.right || e.clientY < r.top || e.clientY > r.bottom) onCloseRef.current(); } }}><div className="modal-inner"><div className="modal-heading"><span className="eyebrow">YOUR MONEY, YOUR CALL</span><button className="icon-button" onClick={onClose} aria-label="Close dialog"><Icon name="close" /></button></div><h2 id="modal-title">{title}</h2>{children}</div></dialog>;
 }
 
 function TransferForm({ state, initial, onComplete }) {

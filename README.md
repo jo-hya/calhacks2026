@@ -1,4 +1,4 @@
-# Pocket
+# Lila
 
 A simple budget app for making room for everyday life. Built with React and Vite for Cal Hacks 13.0.
 

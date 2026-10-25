@@ -59,5 +59,5 @@ Assert-Exit 'APK installation'
 # Hide the launch output because ADB includes intent extras in its status text.
 $launchResult = & $adbPath -s $Serial shell am start -S -n com.pocket.budget/.MainActivity --es pocketPairToken $link.token 2>&1
 Assert-Exit 'App launch'
-if ($launchResult -match 'Error:|Exception') { throw 'Android could not launch Pocket.' }
-Write-Host 'Pocket is installed and running. Keep USB connected and npm run demo running.'
+if ($launchResult -match 'Error:|Exception') { throw 'Android could not launch Lila.' }
+Write-Host 'Lila is installed and running. Keep USB connected and npm run demo running.'
