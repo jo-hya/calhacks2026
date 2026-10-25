@@ -14,7 +14,7 @@ import { lookupPlace } from './place.mjs';
 const PENDING_TTL_MS = 30 * 60 * 1000;
 const NUDGE_COOLDOWN_MS = 20 * 60 * 1000;
 const MAX_HISTORY = 24;
-const TROUBLE = 'Lila is having trouble connecting right now. Nothing changed. Please text me again in a minute.';
+const TROUBLE = 'Lila is having trouble connecting. An approved action may have completed. Check the app before trying again.';
 
 // `agent` is the Claude agent (on when ANTHROPIC_API_KEY is set); without it the scripted
 // responder in conversation.mjs answers, as before.
@@ -35,7 +35,7 @@ export function createDemoServer({ file = '.pocket/state.json', sync = syncNessi
   }
   function livePending() {
     const p = data.agent.pending;
-    return p && p.expiresAt > Date.now() ? p : null;
+    return p && (p.attempted || p.expiresAt > Date.now()) ? p : null;
   }
   const saveAgent = fields => save({ ...data, agent: { ...data.agent, ...fields } });
 
@@ -46,13 +46,17 @@ export function createDemoServer({ file = '.pocket/state.json', sync = syncNessi
     pending: livePending,
     history: () => data.agent.history,
     setPending: action => serial(() => {
+      if (data.agent.pending?.attempted) throw new Error('Check the previous payment with YES before proposing another action; its outcome is uncertain.');
       // Validate up front so the agent can't ask the user to approve something impossible.
       if (action.kind === 'transfer') proposeTransfer(data.state, { ...action, id: 'check' });
       const pending = { ...action, id: `act-${randomBytes(4).toString('hex')}`, expiresAt: Date.now() + PENDING_TTL_MS };
       saveAgent({ pending });
       return pending;
     }),
-    clearPending: () => serial(() => saveAgent({ pending: null })),
+    clearPending: () => serial(() => {
+      if (data.agent.pending?.attempted) throw new Error('The payment was already submitted and cannot be cancelled here. Reply YES to check its status.');
+      saveAgent({ pending: null });
+    }),
     appendHistory: (...messages) => serial(() => {
       const history = [...data.agent.history, ...messages].slice(-MAX_HISTORY);
       while (history.length && history[0].role !== 'user') history.shift();
@@ -66,13 +70,15 @@ export function createDemoServer({ file = '.pocket/state.json', sync = syncNessi
         if (p.kind === 'transfer') {
           const proposal = proposeTransfer(data.state, { ...p, id: p.id });
           save({ ...data, state: confirmTransfer(data.state, proposal), agent: { ...data.agent, pending: null } });
-        } else saveAgent({ pending: null });
-        return p;
+        } else saveAgent({ pending: { ...p, attempted: true } });
+        return { ...p, reconcileOnly: Boolean(p.attempted) };
       });
       if (action.kind !== 'purchase') return;
       // An approved ALT: pay through Nessie, then import it like any other purchase.
-      try { await pay({ ...action, date: DEMO_DATE }); }
-      catch (error) { await serial(() => saveAgent({ pending: action })); throw error; }
+      // Persist the attempt before contacting Nessie. After a timeout or restart,
+      // retry only looks up this action's purchase; it must never submit it again.
+      await pay({ ...action, date: DEMO_DATE });
+      await serial(() => { if (data.agent.pending?.id === id) saveAgent({ pending: null }); });
       await serial(refresh);
     },
   };

@@ -80,8 +80,14 @@ export async function seedNessie() {
 // Purchases the Claude agent pays for (an approved ALT). Tagged so a demo reset can remove them.
 const AGENT_TAG = 'pocket-agent:';
 
-export async function createAgentPurchase({ merchant, category, amountCents, date }) {
+export async function createAgentPurchase({ id, merchant, category, amountCents, date, reconcileOnly = false }) {
+  if (!id) throw new Error('A payment action ID is required.');
   const a = await account();
+  const description = `${AGENT_TAG}${id}`;
+  const purchases = await nessie(`/accounts/${a._id}/purchases`);
+  const existing = purchases.find(p => p.description === description);
+  if (existing?._id) return existing._id;
+  if (reconcileOnly) throw new Error('Payment outcome is still unknown. No new payment was submitted. Check Nessie before resetting the demo.');
   const merchants = await nessie('/merchants');
   const name = `Pocket demo - ${merchant}`;
   let m = merchants.find(x => x.name === name && [x.category].flat().includes(category));
@@ -90,12 +96,13 @@ export async function createAgentPurchase({ merchant, category, amountCents, dat
     if (!m?._id) throw new Error('Nessie did not return the created merchant.');
   }
   // The sandbox stores whole dollars; the agent already proposes whole-dollar amounts.
-  const result = await nessie(`/accounts/${a._id}/purchases`, { merchant_id: m._id, medium: 'balance', purchase_date: date, amount: Math.round(amountCents / 100), description: `${AGENT_TAG}${crypto.randomUUID()}`, status: 'completed' });
-  return result?.objectCreated?._id;
+  const result = await nessie(`/accounts/${a._id}/purchases`, { merchant_id: m._id, medium: 'balance', purchase_date: date, amount: Math.round(amountCents / 100), description, status: 'completed' });
+  if (!result?.objectCreated?._id) throw new Error('Nessie did not confirm the payment ID. Check its status before retrying.');
+  return result.objectCreated._id;
 }
 
 export async function deleteAgentPurchases() {
   const a = await account();
   const purchases = await nessie(`/accounts/${a._id}/purchases`);
-  for (const p of purchases) if (String(p.description || '').startsWith(AGENT_TAG)) await nessie(`/purchases/${p._id}`, undefined, 'DELETE');
+  for (const p of purchases) if (String(p.description || '').startsWith(AGENT_TAG)) await nessie(`/purchase/${p._id}`, undefined, 'DELETE');
 }

@@ -37,8 +37,12 @@ Text Lila anything from the verified phone, or use **Try text flow** in the app:
 
 **Approval is enforced in code, not just the prompt.** The agent can only propose;
 `confirm_pending_action` refuses unless the user's own message (not a location update)
-arrived after the proposal, the action matches, it hasn't expired (30 minutes), and
-Nessie was refreshed for this turn. A failed Nessie payment records nothing.
+is exactly YES (case-insensitive), the action matches the pending action at the start
+of the turn, it hasn't expired (30 minutes), and Nessie was refreshed for this turn.
+Payment attempts are saved before submission. After a timeout or restart, YES only
+checks Nessie for that action's purchase; it never resubmits it. Uncertain payments
+remain available for checking after expiry and block replacement or cancellation.
+If Nessie cannot confirm the outcome, check the sandbox before resetting the demo.
 
 ## Details
 
@@ -46,8 +50,8 @@ Nessie was refreshed for this turn. A failed Nessie payment records nothing.
   (Bandwidth free trial limit; `POCKET_SMS_MAX_CHARS` raises it on a paid account).
 - Claude thinks outside the server's one-at-a-time queue, so the app stays responsive
   during a reply; only the actual budget changes take turns.
-- If Claude can't be reached, the user gets "Lila is having trouble connecting...
-  Nothing changed" instead of silence.
+- If Claude can't finish a reply, the user is told an approved action may have
+  completed and to check the app before trying again.
 - **Reset demo** also deletes the Nessie purchases the agent paid for.
 - `POCKET_MODEL` (default `claude-opus-5-5`), `POCKET_EFFORT` (default `medium`; `low`
   replies faster), `POCKET_WEB_SEARCH=off` turns off web search.
