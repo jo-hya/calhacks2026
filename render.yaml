@@ -20,6 +20,9 @@ services:
       - key: VITE_SUPABASE_ANON_KEY
         sync: false
       # Server-side secrets.
+      # Fixed pairing token so the link survives restarts. Generate with: openssl rand -hex 24
+      - key: PAIR_TOKEN
+        sync: false
       - key: ANTHROPIC_API_KEY
         sync: false
       - key: CARTESIA_API_KEY
