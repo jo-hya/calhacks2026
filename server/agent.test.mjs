@@ -45,12 +45,12 @@ test('approval guardrails', async t => {
     const ops = memoryOps();
     await tool(buildTools(ops, { turnId: 't1', userInitiated: true, bankFresh: true }), 'propose_transfer').run({ from: 'shopping', to: 'dining', amount_dollars: 17 });
     assert.match(await tool(buildTools(ops, { turnId: 't2', userInitiated: false, bankFresh: true }), 'confirm_pending_action').run({ action_id: ops.pending().id }), /Refused/);
-    assert.match(await tool(buildTools(ops, { turnId: 't3', userInitiated: true, bankFresh: false }), 'confirm_pending_action').run({ action_id: ops.pending().id }), /Nessie/);
+    assert.match(await tool(buildTools(ops, { turnId: 't3', userInitiated: true, bankFresh: false, approvedActionId: ops.pending().id }), 'confirm_pending_action').run({ action_id: ops.pending().id }), /Nessie/);
   });
   await t.test('a later user reply confirms the exact action', async () => {
     const ops = memoryOps();
     await tool(buildTools(ops, { turnId: 't1', userInitiated: true, bankFresh: true }), 'propose_transfer').run({ from: 'shopping', to: 'dining', amount_dollars: 17 });
-    const later = buildTools(ops, { turnId: 't2', userInitiated: true, bankFresh: true });
+    const later = buildTools(ops, { turnId: 't2', userInitiated: true, bankFresh: true, approvedActionId: ops.pending().id });
     assert.match(await tool(later, 'confirm_pending_action').run({ action_id: 'act-wrong' }), /Refused/);
     assert.match(await tool(later, 'confirm_pending_action').run({ action_id: ops.pending().id }), /Done/);
     assert.equal(remaining(ops.stateNow, 'dining'), 5500);
@@ -61,6 +61,24 @@ test('approval guardrails', async t => {
     assert.match(result, /Only \$60 is available/);
     assert.equal(ops.pending(), null);
   });
+});
+
+test('model tool calls cannot approve negative, forwarded, or replaced actions', async () => {
+  for (const [text, replace, expected] of [
+    ['NO, do not move any money', false, 0], ['Friends: YES', false, 0],
+    ['yes', false, 1], ['YES', true, 0],
+  ]) {
+    const ops = memoryOps();
+    const proposal = { kind: 'transfer', from: 'shopping', to: 'dining', amountCents: 1700, turn: 'earlier' };
+    await ops.setPending(proposal);
+    const client = { beta: { messages: { toolRunner: ({ tools }) => (async function* () {
+      if (replace) await ops.setPending(proposal);
+      const reply = await tool(tools, 'confirm_pending_action').run({ action_id: ops.pending().id });
+      yield { stop_reason: 'end_turn', content: [{ type: 'text', text: reply }] };
+    })() } } };
+    await runAgent({ ops, text, client });
+    assert.equal(ops.stateNow.adjustments.length, expected, text + (replace ? ' with replacement' : ''));
+  }
 });
 
 test('runAgent drives the tool loop and keeps text history', async () => {
@@ -139,7 +157,7 @@ test('approved ALT payments go through Nessie and are re-imported', async t => {
   assert.equal(paid[0].merchant, 'Taqueria');
   assert.ok(syncs() > before + 1, 'purchase is imported from Nessie after paying');
 
-  // A failed payment leaves the action pending and records nothing.
+  // A failed payment remains available for reconciliation, not a second submission.
   const failing = await agentServer(t, { agent, pay: async () => { throw new Error('Nessie down'); } });
   await failing.api('/api/message', { text: 'ALT' });
   const state = await failing.api('/api/message', { text: 'yes' });
@@ -151,6 +169,22 @@ test('agent failures still get a reply text', async t => {
   const { text, sent } = await agentServer(t, { agent: async () => { throw new Error('Request timed out.'); } });
   await text('m1', 'hello');
   assert.match(sent[0], /trouble connecting/);
+});
+
+test('failure after a committed transfer does not claim nothing changed', async t => {
+  const { api } = await agentServer(t, { agent: async ({ ops, text }) => {
+    if (text === 'KEEP') {
+      await ops.setPending({ kind: 'transfer', from: 'shopping', to: 'dining', amountCents: 1700, turn: 'a' });
+      return 'Move $17?';
+    }
+    await ops.applyPending(ops.pending().id);
+    throw new Error('Final response timed out');
+  } });
+  await api('/api/message', { text: 'KEEP' });
+  const state = await api('/api/message', { text: 'YES' });
+  assert.equal(state.adjustments.length, 1);
+  assert.doesNotMatch(state.conversation.at(-1).text, /Nothing changed/i);
+  assert.match(state.conversation.at(-1).text, /may have completed/);
 });
 
 test('location nudges', async t => {

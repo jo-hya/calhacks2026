@@ -125,3 +125,18 @@ test('starter prompts get spoken answers; voice off returns captions only', asyn
   assert.equal(recorded.voice.audio, null);
   assert.equal(spoken.length, 1);
 });
+
+test('a spoken "Yes." approves, but not "yes, but wait" or "No."', async () => {
+  const { runAgent } = await import('./agent.mjs');
+  for (const [text, approved] of [['Yes.', true], ['yes!', true], ['yes, but wait', false], ['No.', false]]) {
+    let pending = { id: 'act-1', kind: 'transfer', turn: 'earlier' };
+    let applied = 0;
+    const ops = { state: () => ({ transactions: [], budgets: {}, period: '2026-10' }), pending: () => pending, history: () => [], recall: async () => [], appendHistory: async () => {}, applyPending: async () => { applied++; pending = null; } };
+    const client = { beta: { messages: { toolRunner: ({ tools }) => (async function* () {
+      const reply = await tools.find(t => t.name === 'confirm_pending_action').run({ action_id: 'act-1' });
+      yield { stop_reason: 'end_turn', content: [{ type: 'text', text: reply }] };
+    })() } } };
+    await runAgent({ ops, text, trigger: 'voice', client });
+    assert.equal(applied, approved ? 1 : 0, text);
+  }
+});
