@@ -8,14 +8,14 @@ cheaper option if it won't fit. Built for Cal Hacks 13.0.
 
 ## The voice flow
 
-1. Tap the mic and say: *"My friends want a $55 dinner tonight. Can I? I'm vegetarian."*
-2. Lila answers out loud: dining has $38 left, so it's $17 over. Move money from Clothing, or
-   find somewhere cheaper?
-3. *"Somewhere cheaper."* She finds real nearby vegetarian spots (she remembered) that fit.
-4. *"Yes."* The payment goes through the Capital One sandbox account and the budgets on screen
-   update. Nothing moves until you say yes.
+1. Tap the mic and say: *"My friends want a $55 per person dinner tonight. Can I? I'm vegetarian."*
+2. Lila answers out loud: Your dining category has $38 left, so it's $17 over. I can move money from Clothing, or
+   find somewhere cheaper. What do you prefer?
+3. *"Somewhere cheaper."* Lila finds real nearby vegetarian spots (she stores memories) that fit.
+4. *"Yes."* The payment goes through the Capital One sandbox Nessie account and the budgets on screen
+   dynamically update. Nothing moves until you say yes.
 
-The same agent also answers texts, so a conversation can start by voice and finish by SMS.
+The same agent also answers texts on your phone, so a conversation can start by voice and finish by SMS.
 
 ## What Cartesia does
 
@@ -28,7 +28,7 @@ The same agent also answers texts, so a conversation can start by voice and fini
 | Read aloud | Any text (e.g. a location heads-up) can be spoken | `POST /api/speak` |
 
 Other tools: **Claude** decides what to say and when to propose moving money; **Moss** is Lila's
-memory (preferences you've told her plus your purchases, searched in milliseconds before each
+memory (preferences you've told Lila plus your purchases, searched in milliseconds before each
 reply); **Capital One Nessie** holds the sandbox account and purchases; **Bandwidth** sends
 texts. API details: [Voice and memory](docs/voice-memory.md).
 
@@ -56,24 +56,17 @@ the ngrok address). No keys or secrets are in the repo.
   recordings are transcribed and discarded, never stored.
 - **Money never moves on its own.** Lila can only propose; a transfer or payment needs the
   user's own "yes" in a later message, enforced in code (a forwarded "YES" or a location update
-  doesn't count). If something fails mid-way, Lila says the action *may* have completed rather
-  than claiming nothing changed.
-- **Memory you can see and delete.** Lila only remembers what you say about yourself (never
-  account numbers or passwords); the app lists it with Undo, and "forget that" works. Demo reset
-  clears it.
+  doesn't count). 
 - **Not voice-only.** Every answer has a text caption, there's a text box, and the speaker
   button turns speech off, for noisy places, quiet places, and deaf or hard-of-hearing users.
-- **Sandbox only.** Nessie is a test bank; no real money moves.
 
 ## Known limitations
 
 - **Not streamed yet:** Lila starts speaking after the whole answer is ready (a few seconds).
   Next step: stream Claude's reply into Cartesia's streaming TTS so speech starts in under a
   second.
-- One demo user (Sam); no accounts.
-- Location heads-ups only while the app is open (no background location).
+- Location heads-ups only while the app is open (no background location is tracked to make ).
 - Bandwidth's free trial texts a single verified phone, 129 characters per text.
-- Nessie stores whole dollars, so amounts are rounded.
 
 ---
 
