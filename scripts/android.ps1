@@ -41,8 +41,12 @@ $linkFile = Join-Path $projectRoot '.pocket/device-link.json'
 if (!(Test-Path $linkFile)) { throw 'Start the backend first: npm run demo' }
 $link = Get-Content -LiteralPath $linkFile -Raw | ConvertFrom-Json
 if ($link.token -notmatch '^[a-f0-9]{48}$') { throw 'Invalid pairing file. Restart npm run demo.' }
+# Pair like the app does: the token exchanges for a session cookie, which the API accepts.
+$pairing = Invoke-WebRequest "http://127.0.0.1:3002/pair/$($link.token)" -MaximumRedirection 0 -ErrorAction SilentlyContinue -UseBasicParsing
+$sessionCookie = ($pairing.Headers['Set-Cookie'] | Select-Object -First 1) -replace ';.*$', ''
+if ($sessionCookie -notmatch '^pocket=') { throw 'Could not pair with the backend. Restart npm run demo.' }
 $backendSession = New-Object Microsoft.PowerShell.Commands.WebRequestSession
-$backendSession.Cookies.Add((New-Object System.Net.Cookie('pocket', $link.token, '/', '127.0.0.1')))
+$backendSession.Cookies.Add((New-Object System.Net.Cookie('pocket', $sessionCookie.Substring(7), '/', '127.0.0.1')))
 $null = Invoke-RestMethod 'http://127.0.0.1:3002/api/state' -WebSession $backendSession
 $deviceOutput = & $adbPath devices
 Assert-Exit 'Device discovery'

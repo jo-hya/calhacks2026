@@ -1,0 +1,253 @@
+/* Figma "Final" screens from the Codex page: Home, Location Recommender, Dashboard, Profile,
+   Chat and Voice. Sizes come from the 402 x 874 design frame; positions noted as (x, y) are
+   design coordinates. The phone draws its own status bar and home indicator, so the design's
+   status bar becomes top padding (or the safe area, whichever is larger). */
+
+.page-overview main,.page-nearby main,.page-budgets main,.page-profile main,.page-chat main,.page-voice main{padding-top:0}
+.page-overview .ambient,.page-nearby .ambient,.page-budgets .ambient,.page-profile .ambient,.page-chat .ambient,.page-voice .ambient{display:none}
+.app-shell{padding-bottom:calc(64px + max(30px,env(safe-area-inset-bottom,0px)))}
+.app-shell.page-chat,.app-shell.page-voice{padding-bottom:0;background:#fff}
+.toast-region{bottom:calc(76px + max(30px,env(safe-area-inset-bottom,0px)))}
+
+.lf-screen{position:relative;display:flow-root;min-height:100dvh;overflow-x:clip;color:#fff;background:#3d1d46}
+.lf-screen>:where(:not(.sr-only)){position:relative;z-index:1}
+.lf-screen>.lf-glow{position:absolute;z-index:0;width:478px;height:462px;max-width:none;pointer-events:none}
+
+/* Wordmark row: flower at (26.5, 64.5), "lila" at x 58 in a 40px line centred at y 78. */
+.lf-brand{display:flex;align-items:center;height:40px;margin-top:max(58px,env(safe-area-inset-top,0px));padding-left:26.5px;font:400 20px/40px 'GFS Didot',Didot,'Times New Roman',serif;color:#000}
+.lf-brand.on-dark{color:#fff}
+.lf-logo{position:relative;flex:none;width:31.5px;height:27px}
+.lf-logo>img{position:absolute;left:0;top:0}
+.lf-logo .lf-logo-shadow{left:1px;top:1px}
+.lf-logo .lf-logo-center{left:10.11px;top:10.11px;width:5.174px;height:5.174px}
+.lf-plus{position:absolute;top:calc(max(58px,env(safe-area-inset-top,0px)) - 2px);right:21px;z-index:2;display:grid;place-items:center;width:44px;height:44px;padding:0}
+.lf-plus img{width:24px;height:24px}
+
+/* Bottom navigation ("Menu List"). */
+.lf-nav{position:fixed;z-index:20;left:50%;bottom:0;transform:translateX(-50%);width:100%;max-width:480px;display:flex;align-items:center;background:#fff;border-top:1px solid #b9c0c9;padding:12px 12px calc(4px + max(30px,env(safe-area-inset-bottom,0px)))}
+.lf-nav-item{flex:1 0 0;min-width:0;display:flex;justify-content:center}
+.lf-nav-item>span{display:grid;place-items:center;width:48px;height:48px;border-radius:100px}
+.lf-nav-item[aria-current=page]>span{background:rgba(127,86,121,.5)}
+.lf-nav-item img{width:24px;height:24px}
+.lf-nav-star{position:relative;display:grid;place-items:center;width:48px;height:48px;padding:0;border-radius:10px;background:#3d1d46}
+.lf-nav-star img{width:24px;height:24px}
+.lf-nav-star .lf-small-star{position:absolute;left:23px;top:13px;width:12px;height:12px;animation:lf-star-spin 26.2s linear infinite both}
+
+/* Home - Final */
+.lf-home{padding-bottom:24px}
+.lf-hero{display:flow-root;background:#fff;color:#000;border-radius:0 0 20px 20px;padding:0 24px 27px}
+.lf-hero .lf-brand{margin-left:-24px}
+.lf-hero h1{margin-top:74px;width:263px;font:300 20px/30px 'Poppins',sans-serif}
+.lf-hero h1 strong{font-weight:600}
+.lf-suggestion{display:flex;align-items:center;width:100%;height:34px;margin-top:8px;padding:0;text-align:left;color:#000;font:300 20px/40px 'Poppins',sans-serif}
+.lf-suggestion strong{font-weight:700}
+.lf-big-flower{position:relative;flex:none;width:34px;height:34px;margin-right:8px}
+.lf-big-flower>span{position:absolute;width:32px;height:31px}
+.lf-big-flower-shadow{left:2px;top:2px}
+.lf-big-flower-front{left:0;top:0}
+.lf-big-flower>span>img{position:absolute;max-width:none}
+.lf-big-flower-shadow>img{left:-1.5px;top:-1.5px}
+.lf-big-flower-front>img{left:-.5px;top:-.5px}
+.lf-big-flower-center{position:absolute;left:13px;top:13px;width:7px;height:7px}
+.lf-suggestion-arrow{margin-left:auto;margin-right:4.5px}
+.lf-day-label{margin:25px 24px 0;font:300 20px/30px 'Poppins',sans-serif}
+.lf-day-amount{margin:11px 24px 0;font:700 36px/30px 'Poppins',sans-serif}
+.lf-section-head{display:flex;justify-content:space-between;align-items:flex-end;height:30px;margin:30px 30px 0 24px}
+.lf-section-head h2{font:300 20px/30px 'Poppins',sans-serif}
+.lf-section-head button{padding:0;margin-bottom:3px;color:#fff;font:300 12px/20px 'Poppins',sans-serif;text-decoration:underline}
+.lf-schedule{list-style:none;margin:11px 30px 0 24px;padding:0}
+.lf-schedule li{position:relative;height:58px}
+.lf-dot{position:absolute;left:0;top:15px;width:18px;height:18px}
+.lf-line{position:absolute;left:8.5px;top:36.5px;width:1px;height:33px}
+.lf-plan{position:absolute;left:36px;right:64px;top:5px}
+.lf-plan strong,.lf-plan small{display:block;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;font-family:'Poppins',sans-serif;font-weight:300}
+.lf-plan strong{font-size:16px;line-height:20px}
+.lf-plan small{font-size:12px;line-height:20px}
+.lf-plan-amount{position:absolute;right:0;top:14px;font:300 16px/20px 'Poppins',sans-serif}
+.lf-tracking-head{height:26px;margin-top:22px}
+.lf-tracking-head h2{line-height:26px;color:#fffcfc}
+.lf-tracking-head button{margin-bottom:2px}
+.lf-tracking{display:flex;gap:10px;margin-top:8px;padding:0 24px;overflow-x:auto;scrollbar-width:none}
+.lf-tracking::-webkit-scrollbar{display:none}
+.lf-track-card{position:relative;flex:0 0 156px;height:110px;padding:0;border:1px solid #fff;border-radius:10px;color:#fff;text-align:left}
+.lf-track-card .lf-cat-icon{position:absolute;left:6px;top:9px}
+.lf-track-name{position:absolute;left:37px;top:10px;max-width:113px;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;font:400 16px/24px 'Poppins',sans-serif}
+.lf-track-card strong{position:absolute;right:8px;top:57px;font:600 36px/40px 'Poppins',sans-serif}
+.lf-cat-icon{position:relative;display:grid;place-items:center;flex:none;width:26px;height:26px}
+.lf-cat-icon>img:first-child{position:absolute;inset:0}
+.lf-cat-art{position:relative;object-fit:cover}
+
+/* Location Recommender - Final */
+.lf-nearby{padding-bottom:0}
+.lf-map{height:min(551px,63dvh);overflow:hidden;border-radius:0 0 20px 20px;background:#e6e7e7}
+.lf-map>.leaflet-host{position:absolute;inset:0;z-index:0}
+.lf-map>.lf-brand{position:relative;z-index:800;padding-left:58px;pointer-events:none}
+.lf-map>.lf-plus{z-index:800}
+.lf-map .leaflet-tile-pane{filter:saturate(.3) brightness(1.08) contrast(.88)}
+.map-pin{width:41px;height:41px;transition:transform .15s;filter:drop-shadow(0 2px 3px rgba(0,0,0,.35))}
+.map-pin.active{transform:scale(1.25);filter:drop-shadow(0 0 4px #7f5679)}
+.lf-map .leaflet-control-attribution{margin:0 14px 6px 0;padding:0 4px;border-radius:4px;background:rgba(255,255,255,.7);color:#827885;font:300 8px/14px 'Poppins',sans-serif}
+.lf-map .leaflet-control-attribution a{color:inherit}
+.lf-places{margin-top:15px;min-height:308px;padding:7px 17px 24px;border-radius:20px 20px 0 0;background:#fff;color:#000}
+.lf-places-budget{font:300 12px/27px 'Poppins',sans-serif}
+.lf-places-budget strong{font-weight:700}
+.lf-places-budget em{font-style:normal;font-weight:600;color:#7f5679}
+.lf-places h1{margin-top:-1px;font:700 16px/27px 'Poppins',sans-serif}
+.lf-place{display:grid;grid-template-columns:116px minmax(0,1fr);gap:12px;margin-top:8px;margin-bottom:12px;border-radius:10px;cursor:pointer}
+.lf-place+.lf-place{margin-top:0}
+.lf-place:focus-visible{outline:3px solid #cf93c7;outline-offset:3px}
+.lf-place-thumb{display:grid;place-items:center;height:101px;background:#f2eaf2;color:#3d1d46;font:600 28px 'Poppins',sans-serif}
+.lf-place-body h2{margin-top:-2px;font:700 12px/27px 'Poppins',sans-serif}
+.lf-place-body p{margin-top:-4px;display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:3;overflow:hidden;font:300 10px/27px 'Poppins',sans-serif}
+.lf-place.selected .lf-place-body p{-webkit-line-clamp:unset}
+.lf-place-more{display:flex;flex-wrap:wrap;gap:4px 14px;font:300 10px/20px 'Poppins',sans-serif;color:#7f5679}
+.lf-place-more a{text-decoration:underline}
+.lf-find{margin-top:12px}
+.lf-nearby .nearby-empty{color:#3d1d46}
+
+/* Dashboard - Final */
+.lf-dash{padding-bottom:24px}
+.lf-summary{position:relative;height:204px;margin:8px 18px 0;overflow:hidden;border-radius:13px;background:#fff;color:#3d1d46}
+.lf-month{position:absolute;left:21px;top:15px;display:flex;align-items:center;gap:4.4px;width:78px;height:22px;padding-left:7.5px;border-radius:13px;background:#7f5679;color:#f7f6f4;font:500 8px 'Poppins',sans-serif;letter-spacing:1px;white-space:nowrap}
+.lf-left{position:absolute;left:21px;top:35px;display:flex;align-items:baseline;gap:5px;white-space:nowrap}
+.lf-left strong{font:500 48px/86.4px 'Poppins',sans-serif;letter-spacing:-3px}
+.lf-left span{font:400 12px/14.4px 'Poppins',sans-serif}
+.lf-total-bar{position:absolute;left:21px;top:116px;display:flex;gap:3px;width:292px;max-width:calc(100% - 42px);height:7px;overflow:hidden;border-radius:7px;background:#3d1d46}
+.lf-total-bar>span{flex-shrink:1;height:100%}
+.lf-stats{position:absolute;left:21px;top:142px;display:flex;justify-content:space-between;width:272px;max-width:calc(100% - 42px)}
+.lf-stats>div{display:flex;flex-direction:column;gap:3px}
+.lf-stats span{font:400 10px 'Poppins',sans-serif}
+.lf-stats strong{font:500 17px 'Poppins',sans-serif;letter-spacing:-.4px}
+.lf-cats{display:grid;gap:19px;padding:18px 23px 0 24px}
+.lf-cat{display:block;width:100%;padding:0;color:#fff;text-align:left}
+.lf-cat>span{display:flex}
+.lf-cat-head{align-items:center;gap:5px;height:27px}
+.lf-cat-head .lf-cat-icon{align-self:flex-start;margin-top:1px}
+.lf-cat-name{font:400 18px 'Poppins',sans-serif}
+.lf-cat-chevron{margin-left:auto;margin-right:5.75px;rotate:-90deg}
+.lf-cat-left{display:block!important;margin-top:9px;margin-left:1px;font:300 18px 'Poppins',sans-serif}
+.lf-cat-left strong{font-weight:600}
+.lf-cat-bar{position:relative;height:6px;margin-top:2px;border-radius:5px;background:#d9d9d9}
+.lf-cat-bar>span{position:absolute;left:-1px;top:0;height:6px;border-radius:5px}
+.lf-cat-foot{justify-content:space-between;margin-top:3px;font:400 10px 'Poppins',sans-serif}
+
+/* Profile - Final */
+.lf-profile{padding-bottom:0}
+.lf-profile-head{padding:max(62px,env(safe-area-inset-top,0px)) 26px 0}
+.lf-profile-row{display:flex;align-items:center;gap:7px}
+.lf-avatar{position:relative;display:grid;place-items:center;width:49px;height:49px;padding:0}
+.lf-avatar img{position:absolute;inset:0}
+.lf-avatar span{position:relative;color:#3d1d46;font:600 30px/27px 'Poppins',sans-serif}
+.lf-profile-row strong{font:600 16px/27px 'Poppins',sans-serif}
+.lf-month-label{margin-top:29px;font:300 12px/27px 'Poppins',sans-serif}
+.lf-month-amount{display:flex;align-items:baseline;gap:3px;height:27px}
+.lf-month-amount strong{font:500 30px/27px 'Poppins',sans-serif}
+.lf-month-amount span{font:300 12px/27px 'Poppins',sans-serif}
+.lf-feed{min-height:calc(100dvh - 222px);margin-top:28px;padding:13px 16px 24px 17px;border-radius:20px 20px 0 0;background:#fff;color:#000}
+.lf-feed-day+.lf-feed-day{margin-top:12px}
+.lf-feed-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:5px}
+.lf-feed-head h2,.lf-feed-head button{font:300 12px/27px 'Poppins',sans-serif;color:#000}
+.lf-feed-head button{padding:0;text-decoration:underline}
+.lf-feed-row{position:relative;display:flex;align-items:center;gap:10px;min-height:34px}
+.lf-feed-row:has(.lf-feed-line){padding-bottom:8px;margin-bottom:9px}
+.lf-feed-row p{flex:1;min-width:0;font:300 12px/27px 'Poppins',sans-serif}
+.lf-feed-row p strong{font-weight:500;color:#3d1d46}
+.lf-feed-row>span:not(.lf-feed-icon){margin-right:-1px;font:300 10px/27px 'Poppins',sans-serif;color:#999;white-space:nowrap}
+.lf-feed-icon{position:relative;flex:none;width:34px;height:34px}
+.lf-feed-icon>img{position:absolute;object-fit:cover}
+.lf-feed-icon>img:first-child{inset:0}
+.lf-feed-line{position:absolute;left:-1px;bottom:0;width:370px;max-width:calc(100% + 1px);height:.5px}
+
+/* Chat and Voice - Final */
+.lf-talk{display:flex;flex-direction:column;height:100dvh;background:#fff;color:#3d1d46}
+.lf-talk-header{flex:none;display:flex;align-items:center;justify-content:space-between;height:64px;margin-top:max(54px,env(safe-area-inset-top,0px));padding:0 24px 8px}
+.lf-talk-back{display:flex;align-items:center;width:44px;height:44px;padding:0}
+.lf-talk-back img{width:24px;height:24px}
+.lf-talk-brand{display:flex;align-items:center;gap:3.85px;height:40px;font:400 20px/40px 'GFS Didot',Didot,'Times New Roman',serif;color:#000}
+.lf-talk-brand img{margin-left:-.5px}
+.lf-talk-spacer{width:44px}
+.lf-talk-body{flex:1;min-height:0;overflow-y:auto;overscroll-behavior:contain}
+.lf-talk-sanctuary{display:flex;flex-direction:column;align-items:center;gap:24px;padding:30px 24px 28px}
+.lf-talk-title{font:500 26px/36px 'Poppins',sans-serif;color:#3d1d46;text-align:center}
+.lf-talk-flower{position:relative;flex:none;width:209.148px;height:202.997px}
+.lf-talk-flower>span{position:absolute;width:196.848px;height:190.697px}
+.lf-talk-flower>span>img{position:absolute;max-width:none}
+.lf-tf-shadow{left:12.3px;top:12.3px}
+.lf-tf-shadow>img{left:-6.004px;top:-6.007px}
+.lf-tf-front{left:0;top:0}
+.lf-tf-front>img{left:-1.496px;top:-1.506px}
+.lf-tf-center{position:absolute;left:79.97px;top:79.97px;width:43.061px;height:43.061px}
+.lf-starters{display:flex;flex-direction:column;align-items:center;gap:10px;width:322px;max-width:100%;padding-top:15px}
+.lf-starters>p{width:100%;font:400 11px/18px 'Poppins',sans-serif;color:#7f5679;text-align:center}
+.lf-starter{display:flex;align-items:center;gap:12px;width:100%;height:44px;padding:0 16px;border:.7px solid rgba(232,205,238,.22);border-radius:100px;background:#f8f3fa;color:#3d1d46;font:400 13px 'Poppins',sans-serif;text-align:left}
+.lf-starter>img:first-child{width:17px;height:17px}
+.lf-starter>span{flex:1;min-width:0}
+.lf-starter>img:last-child{width:15px;height:15px}
+.lf-composer{flex:none;display:flex;align-items:center;gap:14px;height:48px;margin:18px 24px max(46px,calc(env(safe-area-inset-bottom,0px) + 12px));padding:0 16px;border:.7px solid rgba(232,205,238,.22);border-radius:100px;background:#f7f2f8}
+.lf-composer>img{width:18px;height:18px}
+.lf-composer input{flex:1;min-width:0;min-height:0;height:100%;margin:0;padding:0;border:0;border-radius:0;background:none;color:#3d1d46;font:400 13px 'Poppins',sans-serif;outline:none}
+.lf-composer input::placeholder{color:#7f5679}
+.lf-composer:focus-within{outline:3px solid #cf93c7;outline-offset:2px}
+.lf-composer-mic{display:grid;place-items:center;width:18px;height:27px;padding:0}
+.lf-composer-mic img{max-width:none;width:19.7px;height:27px}
+.lf-composer-send{position:relative;flex:none;width:30px;height:31px;padding:0;border-radius:100px;background:#3d1d46}
+.lf-composer-send img{position:absolute;left:5px;top:7.5px;width:18px;height:18px}
+.lf-composer-send:disabled{opacity:1;cursor:default}
+.lf-thread{display:flex;flex-direction:column;gap:10px;margin:0;padding:24px 24px 12px;list-style:none}
+.lf-bubble{max-width:82%;padding:11px 15px;border-radius:20px;font:400 13px/1.55 'Poppins',sans-serif;white-space:pre-wrap;overflow-wrap:anywhere}
+.lf-bubble.from-lila{align-self:flex-start;border:.7px solid rgba(232,205,238,.22);border-bottom-left-radius:6px;background:#f8f3fa;color:#3d1d46}
+.lf-bubble.from-you{align-self:flex-end;border-bottom-right-radius:6px;background:#3d1d46;color:#fff}
+.lf-typing{display:flex;align-items:center;gap:8px;align-self:flex-start;font:400 11px/18px 'Poppins',sans-serif;color:#7f5679}
+.lf-typing img{width:20px;height:20px;animation:lf-thinking 1.6s linear infinite}
+.lf-talk-note{padding:0 24px 12px;font:400 11px/18px 'Poppins',sans-serif;color:#9d3546;text-align:center}
+.lf-voice .lf-talk-body{display:flex;flex-direction:column;align-items:center}
+.lf-voice-caption{display:grid;gap:6px;width:322px;max-width:calc(100% - 48px);text-align:center}
+.lf-voice-you{font:400 12px/18px 'Poppins',sans-serif;color:#7f5679}
+.lf-voice-reply{font:400 15px/22px 'Poppins',sans-serif;color:#3d1d46}
+.lf-voice-status{min-height:18px;font:400 11px/18px 'Poppins',sans-serif;color:#7f5679}
+.lf-voice-status.problem{color:#9d3546}
+.lf-voice-controls{flex:none;display:flex;justify-content:center;gap:37px;padding-top:12px;margin-bottom:max(46px,calc(env(safe-area-inset-bottom,0px) + 12px))}
+.lf-call{display:flex;justify-content:center;width:80px}
+.lf-call button{display:grid;place-items:center;width:52px;height:52px;padding:0;border-radius:100px}
+.lf-mute{border:.7px solid rgba(61,29,70,.15)!important;background:#fff}
+.lf-mute[aria-pressed=true]{background:#f2eaf2}
+.lf-mute img{width:30px;height:30px}
+.lf-wave-button{background:#3d1d46}
+.lf-end img{width:52px;height:52px}
+.lf-wave{position:relative;width:30px;height:30px;overflow:hidden}
+.lf-bar{position:absolute;max-width:none}
+.lf-bar-1{left:3.15px;top:12.15px}
+.lf-bar-2{left:8.65px;top:7.15px}
+.lf-bar-3{left:14.15px;top:2.15px}
+.lf-bar-4{left:19.65px;top:7.15px}
+.lf-bar-5{left:25.15px;top:12.15px}
+.lf-wave.live .lf-bar-1,.lf-wave.live .lf-bar-5{animation:lf-bar-swell 1.25s ease-in-out infinite}
+.lf-wave.live .lf-bar-2{animation:lf-bar-rise 1.25s linear infinite}
+.lf-wave.live .lf-bar-3{animation:lf-bar-dip 1.25s ease-in-out infinite}
+.lf-wave.live .lf-bar-4{animation:lf-bar-fall 1.25s linear infinite}
+
+/* Motion from the design (get_motion_context). Home plays its 26.2s timeline once per visit;
+   chat and voice loop every 10s; the nav star twinkles twice per 26.2s. */
+.lf-big-flower-shadow{animation:lf-home-fade 26.2s linear 1 both,lf-home-spin 26.2s linear 1 both,lf-home-slide 26.2s linear 1 both}
+.lf-big-flower-front{animation:lf-home-spin 26.2s linear 1 both}
+.lf-reveal{animation:lf-home-reveal 26.2s linear 1 both}
+.lf-dot.pulse{animation:lf-dot-pulse 26.2s ease-in-out 1 both}
+.lf-chat .lf-tf-shadow{animation:lf-talk-fade 10s linear infinite,lf-talk-spin 10s linear infinite,lf-talk-slide 10s linear infinite}
+.lf-talk-flower .lf-tf-front{animation:lf-talk-spin 10s linear infinite}
+.lf-voice .lf-tf-shadow{animation:lf-talk-spin 10s linear infinite,lf-talk-slide 10s linear infinite}
+.lf-talk-flower.voice{animation:lf-voice-breathe 10s ease-in-out infinite}
+@keyframes lf-home-fade{0%{opacity:0;animation-timing-function:cubic-bezier(.5,0,.5,1)}.73%{opacity:0;animation-timing-function:ease-out}1.95%,100%{opacity:1}}
+@keyframes lf-home-spin{0%{rotate:0deg;animation-timing-function:ease-in}1.95%{rotate:90deg;animation-timing-function:linear}6.73%{rotate:450deg;animation-timing-function:ease-out}12.16%,100%{rotate:720deg}}
+@keyframes lf-home-slide{0%{translate:-2px -2px;animation-timing-function:cubic-bezier(.5,0,.5,1)}2.19%{translate:-2px -2px;animation-timing-function:ease-in-out}7.54%,100%{translate:2px -2px}}
+@keyframes lf-home-reveal{0%{opacity:0;animation-timing-function:cubic-bezier(.5,0,.5,1)}12.81%{opacity:0;animation-timing-function:ease-out}14.76%,100%{opacity:1}}
+@keyframes lf-dot-pulse{0%,6.25%,12.5%,18.75%,25%,100%{opacity:1;scale:1}3.13%,9.38%,15.63%,21.88%{opacity:.55;scale:1.18}}
+@keyframes lf-star-spin{0%{opacity:0;rotate:0deg;scale:.01}30.53%{opacity:0;rotate:0deg;scale:.01;animation-timing-function:ease-out}33.97%{opacity:1;rotate:180deg;scale:1;animation-timing-function:ease-in}37.4%{opacity:0;rotate:360deg;scale:.01}76.34%{opacity:0;rotate:360deg;scale:.01;animation-timing-function:ease-out}79.77%{opacity:1;rotate:540deg;scale:1;animation-timing-function:ease-in}83.21%,100%{opacity:0;rotate:720deg;scale:.01}}
+@keyframes lf-talk-fade{0%{opacity:0;animation-timing-function:cubic-bezier(.5,0,.5,1)}1.91%{opacity:0;animation-timing-function:ease-out}5.1%,100%{opacity:1}}
+@keyframes lf-talk-spin{0%{rotate:0deg;animation-timing-function:ease-in}5.12%{rotate:90deg;animation-timing-function:linear}17.63%{rotate:450deg;animation-timing-function:ease-out}31.85%,100%{rotate:720deg}}
+@keyframes lf-talk-slide{0%{translate:-2px -2px;animation-timing-function:cubic-bezier(.5,0,.5,1)}5.73%{translate:-2px -2px;animation-timing-function:ease-in-out}19.75%,100%{translate:2px -2px}}
+@keyframes lf-voice-breathe{0%,8%{scale:1}13.8%{scale:.9}21.5%{scale:1.055}31.5%,100%{scale:1}}
+@keyframes lf-bar-swell{0%,100%{scale:1 1}50%{scale:1 6}}
+@keyframes lf-bar-dip{0%,100%{scale:1 1}50%{scale:1 .167}}
+@keyframes lf-bar-rise{0%{scale:1 1;animation-timing-function:ease-out}25%{scale:1 1.714;animation-timing-function:ease-in}50%{scale:1 1;animation-timing-function:ease-out}75%{scale:1 .286;animation-timing-function:ease-in}100%{scale:1 1}}
+@keyframes lf-bar-fall{0%{scale:1 1;animation-timing-function:ease-out}25%{scale:1 .286;animation-timing-function:ease-in}50%{scale:1 1;animation-timing-function:ease-out}75%{scale:1 1.714;animation-timing-function:ease-in}100%{scale:1 1}}
+@keyframes lf-thinking{to{rotate:360deg}}

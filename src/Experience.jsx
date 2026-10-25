@@ -6,13 +6,13 @@ import { DEFAULT_PROFILE } from './lib/preferences.js';
 import { store, connected } from './lib/store.js';
 import { locationStatus, nativeLocation, startSharing, stopSharing } from './lib/location.js';
 
-const asset = name => `/figma/final/${name}`;
+export const art = name => `/figma/final/${name}`;
 const pinIcon = (number, active) => L.divIcon({ className: 'map-pin-wrap', html: `<img class="map-pin${active ? ' active' : ''}" src="/figma/final/pin.png" alt="Place ${number}" />`, iconSize: [41, 41], iconAnchor: [20, 41] });
 export function Flower({ small = false }) {
   return <span className={`lila-flower ${small ? 'small' : ''}`} aria-hidden="true">
-    <img className={small ? '' : 'flower-shadow'} src={asset(small ? '4-imgVector2-19431.svg' : '4-imgVector3-94ce1.svg')} alt="" />
-    <img className={small ? '' : 'flower-front'} src={asset(small ? '4-imgVector1-6a197.svg' : '4-imgVector4-09619.svg')} alt="" />
-    <img className="flower-center" src={asset(small ? '4-imgEllipse4-f1184.svg' : '4-imgEllipse5-49e6d.svg')} alt="" />
+    <img className={small ? '' : 'flower-shadow'} src={art(small ? '4-imgVector2-19431.svg' : '4-imgVector3-94ce1.svg')} alt="" />
+    <img className={small ? '' : 'flower-front'} src={art(small ? '4-imgVector1-6a197.svg' : '4-imgVector4-09619.svg')} alt="" />
+    <img className="flower-center" src={art(small ? '4-imgEllipse4-f1184.svg' : '4-imgEllipse5-49e6d.svg')} alt="" />
   </span>;
 }
 export function SmsLink({ state, text = '', children = 'Text Lila', className = 'button primary' }) {
@@ -20,13 +20,35 @@ export function SmsLink({ state, text = '', children = 'Text Lila', className = 
   return <a className={className} href={`sms:${state.phone}?body=${encodeURIComponent(text)}`}>{children}</a>;
 }
 
-const ChatIcon = () => <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinejoin="round" aria-hidden="true"><path d="M21 12a8 8 0 0 1-11.6 7.1L4 20l1-4.6A8 8 0 1 1 21 12Z" /></svg>;
-
-const PlusIcon = () => <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14" /></svg>;
+// Shared pieces of the Figma "Final" screens.
+// The soft purple light behind dark screens, placed by the design's ellipse position.
+export const Glow = ({ x, y }) => <img className="lf-glow" src={art('2-imgEllipse2-2c086.svg')} alt="" aria-hidden="true" style={{ left: x - 70, top: y - 70 }} />;
+// "lila" wordmark with its flower; `tone` picks the dark (white screens) or light artwork.
+export function LilaBrand({ tone = 'dark', logo = true }) {
+  return <div className={`lf-brand${tone === 'light' ? ' on-dark' : ''}`}>
+    {logo && <span className="lf-logo" aria-hidden="true">{tone === 'dark'
+      ? <><img className="lf-logo-shadow" src={art('4-imgVector2-19431.svg')} alt="" /><img className="lf-logo-front" src={art('4-imgVector1-6a197.svg')} alt="" /><img className="lf-logo-center" src={art('4-imgEllipse4-f1184.svg')} alt="" /></>
+      : <img src={art('dashboard-logo-0eabe.svg')} alt="" />}</span>}
+    <span>lila</span>
+  </div>;
+}
+export const PlusButton = ({ tone = 'dark', label, onClick }) => <button className="lf-plus" aria-label={label} onClick={onClick}><img src={art(tone === 'dark' ? 'plus-dark-55779.svg' : 'plus-light-fd6a3.svg')} alt="" /></button>;
+// Category artwork from the design; Groceries has none, so it uses a drawn basket.
+const CATEGORY_ART = { dining: ['3-imgMeat1-c4edf.png', 16, true], shopping: ['3-imgMeat2-9dbcb.png', 15, true], transport: ['3-imgMeat3-50a37.png', 15, false], social: ['3-imgMeat4-627cf.png', 14, true] };
+export function CategoryArt({ id }) {
+  const [file, size, flip] = CATEGORY_ART[id] || [];
+  return <span className="lf-cat-icon" aria-hidden="true"><img src={art('3-imgEllipse4-061cb.svg')} alt="" />
+    {file ? <img className="lf-cat-art" src={art(file)} alt="" style={{ width: size, height: size, transform: flip ? 'scaleX(-1)' : undefined }} />
+      : <svg className="lf-cat-art" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><path d="M3 10h18l-2 10H5L3 10ZM7 10l3-7m7 7-3-7M9 14v3m6-3v3" /></svg>}
+  </span>;
+}
+// The design lists Groceries after the others; it keeps every category.
+const DISPLAY_ORDER = ['dining', 'shopping', 'transport', 'social', 'groceries'];
+export const inDisplayOrder = budgets => [...budgets].sort((a, b) => DISPLAY_ORDER.indexOf(a.id) - DISPLAY_ORDER.indexOf(b.id));
+const firstName = state => ({ ...DEFAULT_PROFILE, ...state.profile }).name.split(' ')[0];
 
 export function Home({ state, navigate, onAdd }) {
-  const profile = { ...DEFAULT_PROFILE, ...state.profile };
-  const budgets = getBudgets(state);
+  const budgets = inDisplayOrder(getBudgets(state));
   const totals = getTotals(state);
   const dining = budgets.find(b => b.id === 'dining');
   // Days left in the demo month, counting today, to spread what remains across them.
@@ -35,24 +57,37 @@ export function Home({ state, navigate, onAdd }) {
   const diningAllowance = perDay(dining.remaining);
   const dayBudget = perDay(totals.remaining);
   const plans = state.plans || [];
-  return <>
-    <header className="recommendation-hero">
-      <div className="brand-row"><span className="lila-brand"><Flower small /><span>lila</span></span><button className="icon-button" aria-label="Add a purchase" onClick={onAdd}><PlusIcon /></button></div>
-      <h1>Need something for<br /><strong>dinner</strong> {profile.name.split(' ')[0]}?</h1>
-      <button className="daily-suggestion" onClick={() => navigate('nearby')}><Flower /><span className="suggestion-copy">Spend <strong>{money(diningAllowance)}</strong> to stay on track</span><span className="suggestion-arrow" aria-hidden="true">›</span></button>
+  const dot = i => i === plans.length - 1 ? 'schedule-dot-3-c997e.svg' : i === 0 ? 'schedule-dot-1-78c14.svg' : 'schedule-dot-2-1d9d8.svg';
+  return <div className="lf-screen lf-home">
+    <Glow x={58} y={679} /><Glow x={-80} y={67} />
+    <header className="lf-hero">
+      <LilaBrand />
+      <PlusButton label="Add a purchase" onClick={onAdd} />
+      <h1>Need something for<br /><strong>dinner</strong> <span>{firstName(state)}?</span></h1>
+      <button className="lf-suggestion" onClick={() => navigate('nearby')}>
+        <span className="lf-big-flower" aria-hidden="true">
+          <span className="lf-big-flower-shadow"><img src={art('home-flower-shadow-5597f.svg')} alt="" /></span>
+          <span className="lf-big-flower-front"><img src={art('home-flower-front-b45d1.svg')} alt="" /></span>
+          <img className="lf-big-flower-center" src={art('4-imgEllipse5-49e6d.svg')} alt="" />
+        </span>
+        <span className="lf-reveal">Spend <strong>{money(diningAllowance)}</strong> to stay on track</span>
+        <img className="lf-suggestion-arrow lf-reveal" src={art('suggestion-arrow-f64d0.svg')} alt="" />
+      </button>
     </header>
-    <section className="home-dark">
-      <div className="home-day"><span>Budget for the day</span><strong>{money(dayBudget)}</strong></div>
-      <div className="home-schedule">
-        <div className="section-row"><h2>Schedule</h2><button className="text-button" onClick={() => navigate('budgets')}>Modify</button></div>
-        <ol className="schedule-list">{plans.map((p, i) => <li key={p.id}><span className={`schedule-dot ${i < 2 ? 'filled' : ''}`} aria-hidden="true" /><div><strong>{p.title}</strong><small>{p.detail}</small></div><span className="schedule-amount">{money(p.amountCents)}</span></li>)}</ol>
-      </div>
-      <section className="home-tracking" aria-label="Budget tracking">
-        <div className="section-row"><h2>Budget Tracking</h2><button className="text-button" onClick={() => navigate('budgets')}>See more</button></div>
-        <div className="tracking-row">{budgets.map(b => <button className="tracking-card" key={b.id} onClick={() => navigate('budgets')} aria-label={`${b.name}: ${money(b.remaining)} left`}><span className="tracking-name">{b.name}</span><strong>{money(b.remaining)}</strong></button>)}</div>
-      </section>
-    </section>
-  </>;
+    <p className="lf-day-label">Budget for the day</p>
+    <p className="lf-day-amount">{money(dayBudget)}</p>
+    <div className="lf-section-head"><h2>Schedule</h2><button onClick={() => navigate('budgets')}>Modify</button></div>
+    <ol className="lf-schedule">{plans.map((p, i) => <li key={p.id}>
+      <img className={`lf-dot${i === plans.length - 1 ? ' pulse' : ''}`} src={art(dot(i))} alt="" />
+      {i < plans.length - 1 && <img className="lf-line" src={art('schedule-line-f65b6.svg')} alt="" />}
+      <div className="lf-plan"><strong>{p.title}</strong><small>{p.detail}</small></div>
+      <span className="lf-plan-amount">{money(p.amountCents)}</span>
+    </li>)}</ol>
+    <div className="lf-section-head lf-tracking-head"><h2>Budget Tracking</h2><button onClick={() => navigate('budgets')}>See more</button></div>
+    <div className="lf-tracking" aria-label="Budget tracking">{budgets.map(b => <button className="lf-track-card" key={b.id} onClick={() => navigate('budgets')} aria-label={`${b.name}: ${money(b.remaining)} left`}>
+      <CategoryArt id={b.id} /><span className="lf-track-name">{b.name}</span><strong>{money(b.remaining)}</strong>
+    </button>)}</div>
+  </div>;
 }
 
 export function LocationControl({ state }) {
@@ -69,7 +104,7 @@ export function LocationControl({ state }) {
   return <div className="location-control"><div><strong>Nearby heads-ups</strong><span>{status.active ? 'On · looking out for your budget' : 'Off · your location stays private'}</span></div><button className="button secondary" disabled={busy || !connected} onClick={toggle}>{busy ? 'One moment…' : status.active ? 'Pause' : 'Enable'}</button><p>{nativeLocation ? 'Allow location to get a text near spending spots, even when you switch apps or lock your phone. Pause anytime.' : 'Location works while this page is open. Background heads-ups are available in the Android app.'}</p>{status.active && status.message && <p role="status">{status.message}</p>}{error && <p role="alert" className="form-error">{error}</p>}</div>;
 }
 
-export function Nearby({ state }) {
+export function Nearby({ state, onAdd }) {
   const dining = getBudgets(state).find(b => b.id === 'dining');
   const profile = { ...DEFAULT_PROFILE, ...state.profile };
   const loc = state.lastLocation;
@@ -82,8 +117,10 @@ export function Nearby({ state }) {
   const [selected, setSelected] = useState(null);
   const mapHost = useRef(null), map = useRef(null), pins = useRef([]);
   useEffect(() => {
-    const instance = L.map(mapHost.current, { zoomControl: false, attributionControl: false }).setView([lat, lng], 14);
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19 }).addTo(instance);
+    const instance = L.map(mapHost.current, { zoomControl: false }).setView([lat, lng], 14);
+    instance.attributionControl.setPrefix(false);
+    // OpenStreetMap's terms require the credit line; CSS mutes the tiles toward the design's light map.
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19, attribution: '© OpenStreetMap contributors' }).addTo(instance);
     if (loc) L.circleMarker([lat, lng], { radius: 7, color: '#fff', weight: 3, fillColor: '#3d1d46', fillOpacity: 1 }).addTo(instance);
     map.current = instance;
     return () => { instance.remove(); map.current = null; };
@@ -109,21 +146,24 @@ export function Nearby({ state }) {
     try { await store.message(`Find up to 3 cheaper dining options near ${area}. My preferences: ${profile.preferences || 'flexible'}. Read my dining budget and save the researched recommendations to the app. Include source links and label prices as estimates. Do not propose purchases.`); }
     catch(e) { setError(e.message); } finally { setBusy(false); }
   }
-  return <div className="nearby-screen">
-    <div className="nearby-map">
+  return <div className="lf-screen lf-nearby">
+    <Glow x={-45} y={496} />
+    <div className="lf-map">
       <div className="leaflet-host" ref={mapHost} role="region" aria-label="Map of nearby places" />
-      <div className="nearby-top"><span className="lila-brand"><Flower small /><span>lila</span></span></div>
-      <span className="map-weekly">⌄ WEEKLY</span>
+      <LilaBrand logo={false} />
+      <PlusButton label="Add a purchase" onClick={onAdd} />
     </div>
-    <section className="nearby-results">
-      <p className="nearby-budget">Dining: <strong>{money(dining.remaining)} left</strong></p>
+    <section className="lf-places">
+      <p className="lf-places-budget"><strong>Dining</strong>: <em>{money(dining.remaining)} left</em></p>
       <h1>{area}</h1>
-      {places.map((p,i) => <article className={`place-card${i === selected ? ' selected' : ''}`} key={`${p.name}-${i}`} tabIndex={0} onClick={() => choose(i)} onKeyDown={e => { if (e.key === 'Enter') choose(i); }} aria-current={i === selected || undefined}>
-        <div className="place-thumb" aria-hidden="true"><span>{p.name.slice(0,1)}</span></div>
-        <div className="place-body"><h2>{i+1}. {p.name}</h2><p>{p.description}</p><span className="price-estimate">About {money(Math.round(p.estimatedPrice*100))} per person · estimate</span><div className="place-links"><a href={p.sourceUrl} target="_blank" rel="noreferrer">Details ↗</a><a href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(p.name+' '+p.area)}`} target="_blank" rel="noreferrer">Directions ↗</a><SmsLink state={state} className="text-link" text={`Tell me more about ${p.name}.`} /></div></div>
+      {places.map((p,i) => <article className={`lf-place${i === selected ? ' selected' : ''}`} key={`${p.name}-${i}`} tabIndex={0} onClick={() => choose(i)} onKeyDown={e => { if (e.key === 'Enter') choose(i); }} aria-current={i === selected || undefined}>
+        <div className="lf-place-thumb" aria-hidden="true">{p.name.slice(0,1)}</div>
+        <div className="lf-place-body"><h2>{i+1}. {p.name}</h2><p>{p.description}</p>
+          {i === selected && <div className="lf-place-more"><span>About {money(Math.round(p.estimatedPrice*100))} per person · estimate</span><a href={p.sourceUrl} target="_blank" rel="noreferrer">Details ↗</a><a href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(p.name+' '+p.area)}`} target="_blank" rel="noreferrer">Directions ↗</a></div>}
+        </div>
       </article>)}
       {!places.length && <div className="nearby-empty"><Flower /><h2>Find your next little favorite.</h2><p>Lila uses your budget and preferences to find a few places worth trying.</p></div>}
-      <button className="button primary full-width" disabled={busy || !connected || !state.agentEnabled} onClick={find}>{busy ? 'Lila is finding a few options…' : places.length ? 'Find fresh suggestions' : 'Find places for me'}</button>{busy && <p className="modal-footnote" role="status">Checking your budget and looking up real places. You can keep exploring the app.</p>}{error && <p role="alert" className="form-error">{error}</p>}<LocationControl state={state} />
+      <button className="button primary full-width lf-find" disabled={busy || !connected || !state.agentEnabled} onClick={find}>{busy ? 'Lila is finding a few options…' : places.length ? 'Find fresh suggestions' : 'Find places for me'}</button>{busy && <p className="modal-footnote" role="status">Checking your budget and looking up real places. You can keep exploring the app.</p>}{error && <p role="alert" className="form-error">{error}</p>}<LocationControl state={state} />
     </section>
   </div>;
 }
