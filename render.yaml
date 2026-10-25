@@ -1,0 +1,50 @@
+# Render Blueprint: runs the Lila server (API + built web app) on Render, so the demo
+# no longer needs the laptop or ngrok. Secrets are entered in the Render dashboard
+# (sync: false) and never committed. See docs/hosted-demo.md.
+services:
+  - type: web
+    name: lila
+    runtime: node
+    plan: free
+    buildCommand: npm ci && npm run build
+    startCommand: node server/index.mjs
+    healthCheckPath: /health
+    envVars:
+      - key: NODE_VERSION
+        value: 22.18.0
+      - key: HOST
+        value: 0.0.0.0
+      # Build-time values for the web app (public by design; use the anon key only).
+      - key: VITE_SUPABASE_URL
+        sync: false
+      - key: VITE_SUPABASE_ANON_KEY
+        sync: false
+      # Server-side secrets.
+      - key: ANTHROPIC_API_KEY
+        sync: false
+      - key: CARTESIA_API_KEY
+        sync: false
+      - key: MOSS_PROJECT_ID
+        sync: false
+      - key: MOSS_PROJECT_KEY
+        sync: false
+      - key: NESSIE_API_KEY
+        sync: false
+      - key: NESSIE_ACCOUNT_ID
+        sync: false
+      - key: GOOGLE_MAPS_API_KEY
+        sync: false
+      - key: BANDWIDTH_ACCOUNT_ID
+        sync: false
+      - key: BANDWIDTH_APPLICATION_ID
+        sync: false
+      - key: BANDWIDTH_PHONE_NUMBER
+        sync: false
+      - key: BANDWIDTH_VERIFIED_PHONE_NUMBER
+        sync: false
+      - key: BANDWIDTH_CLIENT_ID
+        sync: false
+      - key: BANDWIDTH_CLIENT_SECRET
+        sync: false
+      - key: BANDWIDTH_WEBHOOK_TOKEN
+        sync: false
