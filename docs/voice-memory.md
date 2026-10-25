@@ -1,8 +1,28 @@
-# Voice and memory (backend)
+# Voice and memory
 
 Lila can be talked to in the app (Cartesia) and remembers what users tell it (Moss).
-This is the backend; the screens are still to be designed. All routes need the app's
-pairing cookie, like the rest of `/api/*`.
+All routes need the app's pairing cookie, like the rest of `/api/*`.
+
+## Connecting a screen (chat + voice)
+
+Everything on a chat/voice screen goes to the same Claude agent as texts: same budget, Nessie
+purchases, memory and YES-approval rules. `src/lib/store.js` has helpers for the app:
+
+| On the screen | Call | Returns |
+|---|---|---|
+| Typed message or a starter chip | `store.ask(text, speak)` | `{ transcript, reply, audio, audioType, remembered }` |
+| A recording (`MediaRecorder` blob) | `store.voice(blob, speak)` | same |
+| "Undo" on a Remembered note | `store.forget(id)` | updated app state |
+
+`speak` is the speaker (🔊) button: `false` returns text only and skips generating speech.
+Play `audio` with `new Audio('data:' + audioType + ';base64,' + audio).play()`. Replies are
+one or two short sentences, written to be spoken. Both helpers also refresh the app state
+(budgets, `memories`).
+
+- The mic needs HTTPS on phones (open the app through the ngrok address) or `127.0.0.1` on the
+  laptop. Safari records `audio/mp4`, Chrome and Android `audio/webm`; both work.
+- The Android app has microphone permission (rebuild after pulling).
+- Pause recording while Lila's answer plays, or the mic may pick her up.
 
 ## Setup
 
@@ -43,6 +63,11 @@ Response: the usual app state plus
 Play it with `new Audio('data:audio/mpeg;base64,' + voice.audio).play()`. `remembered`
 lists facts saved during this turn, for a "Remembered: Vegetarian · Undo" note.
 `audio` is `null` if speech failed; show `reply` as text.
+
+`?speak=0` skips speech (Lila's voice turned off): the reply comes back as text only.
+
+`POST /api/voice/ask` `{ "text": "...", "speak": true }` answers a typed or tapped question
+(the starter prompts) the same way.
 
 `POST /api/speak` `{ "text": "..." }` returns MP3 bytes, e.g. a **Listen** button on a heads-up.
 

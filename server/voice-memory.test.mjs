@@ -111,3 +111,17 @@ test('voice routes explain when voice is off', async t => {
   assert.match((await res.json()).error, /CARTESIA_API_KEY/);
   assert.equal((await (await api('/api/state')).json()).voiceEnabled, false);
 });
+
+test('starter prompts get spoken answers; voice off returns captions only', async t => {
+  const spoken = [];
+  const voice = { enabled: true, transcribe: async buf => buf.toString(), speak: async text => { spoken.push(text); return Buffer.from('mp3'); } };
+  const { api } = await server(t, { agent: async ({ text, trigger }) => `${trigger}: ${text}`, voice });
+  const on = await (await api('/api/voice/ask', { text: 'How am I doing with my spending?' })).json();
+  assert.equal(on.voice.reply, 'voice: How am I doing with my spending?');
+  assert.ok(on.voice.audio);
+  const off = await (await api('/api/voice/ask', { text: 'Help me save', speak: false })).json();
+  assert.equal(off.voice.audio, null);
+  const recorded = await (await api('/api/voice?speak=0', 'hello', 'audio/webm')).json();
+  assert.equal(recorded.voice.audio, null);
+  assert.equal(spoken.length, 1);
+});

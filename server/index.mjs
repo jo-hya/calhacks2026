@@ -197,7 +197,7 @@ export function createDemoServer({ file = '.pocket/state.json', sync = syncNessi
         if (!(req.headers.cookie || '').split(';').some(c => c.trim() === `pocket=${token}`)) return json(401, { error: 'Open the pairing link printed by npm run demo on this device first.' });
         if (req.method === 'GET' && url.pathname === '/api/state') return json(200, view());
         // Voice takes a raw recording, so it comes before the JSON-only check below.
-        if (req.method === 'POST' && url.pathname === '/api/voice') { const result = await talk(req); return json(200, { ...view(), voice: result }); }
+        if (req.method === 'POST' && url.pathname === '/api/voice') { const result = await talk(req, url); return json(200, { ...view(), voice: result }); }
         if (req.method !== 'POST' || req.headers['content-type'] !== 'application/json') return json(400, { error: 'Expected a JSON POST.' });
         const input = await body(req);
         // These wait on Claude, so they run outside `serial` (their changes go through ops).
@@ -208,6 +208,12 @@ export function createDemoServer({ file = '.pocket/state.json', sync = syncNessi
         }
         // Await first: the view must reflect what the turn changed.
         if (url.pathname === '/api/location') { const result = await nudge(input); return json(200, { ...view(), location: result }); }
+        if (url.pathname === '/api/voice/ask') {
+          // A typed or tapped question (e.g. a starter prompt) answered like a spoken one.
+          if (typeof input.text !== 'string' || !input.text.trim() || input.text.length > 1000) throw new Error('Invalid message.');
+          const result = await answerAloud(input.text.trim(), input.speak !== false);
+          return json(200, { ...view(), voice: result });
+        }
         if (url.pathname === '/api/speak') {
           // Reads a text aloud, e.g. a heads-up notification ("Listen").
           if (!voice.enabled) throw new Error('Voice is off (no CARTESIA_API_KEY).');
@@ -288,17 +294,26 @@ export function createDemoServer({ file = '.pocket/state.json', sync = syncNessi
   // Hold-to-talk: the app sends the recording, Lila answers like a text reply, and the
   // answer comes back as text plus spoken audio. `remembered` lists facts saved this turn
   // (the app shows "Remembered: ...").
-  async function talk(req) {
+  // `?speak=0` (Lila's voice turned off in the app) skips speech and returns captions only.
+  async function talk(req, url) {
     if (!voice.enabled) throw new Error('Voice is off (no CARTESIA_API_KEY).');
     const type = String(req.headers['content-type'] || '');
     if (!type.startsWith('audio/')) throw new Error('Send the recording as audio/webm, audio/mp4 or audio/wav.');
     const chunks = []; let size = 0;
     for await (const c of req) { size += c.length; if (size > MAX_AUDIO_BYTES) throw new Error('Recording too long.'); chunks.push(c); }
     const transcript = await voice.transcribe(Buffer.concat(chunks), type);
+    return answerAloud(transcript, url.searchParams.get('speak') !== '0');
+  }
+
+  // A spoken-style reply (also used by the voice screen's starter prompts), plus the facts
+  // remembered during the turn.
+  async function answerAloud(transcript, speak) {
     const known = new Set(data.memories.map(m => m.id));
     const answer = transcript ? await reply(transcript, 'voice') : "Sorry, I didn't catch that. Try again?";
     let audio = null;
-    try { audio = (await voice.speak(answer)).toString('base64'); } catch (error) { console.error('Speech failed:', error.message); }
+    if (speak && voice.enabled) {
+      try { audio = (await voice.speak(answer)).toString('base64'); } catch (error) { console.error('Speech failed:', error.message); }
+    }
     return { transcript, reply: answer, audio, audioType: 'audio/mpeg', remembered: data.memories.filter(m => !known.has(m.id)) };
   }
 
