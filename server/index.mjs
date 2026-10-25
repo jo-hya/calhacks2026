@@ -377,6 +377,8 @@ export function createDemoServer({ file = '.pocket/state.json', sync = syncNessi
             save({ ...data, state: { ...state, profile: data.state.profile, revision: data.state.revision + 1 }, proposals: {}, messages: [], agent: { pending: null, history: [] }, memories: [] });
             lastNudge.clear();
           } else if (url.pathname === '/api/recommendations/remove') save({ ...data, state: removeRecommendation(data.state, input.id) });
+          // Deletes one saved conversation (chat and voice turns between its first and last message). Texts are kept.
+          else if (url.pathname === '/api/conversations/remove') save({ ...data, messages: data.messages.filter(m => m.channel === 'sms' || !(m.at >= input.from && m.at <= input.to)) });
           else if (url.pathname === '/api/expense') save({ ...data, state: addExpense(data.state, { ...input, source: 'manual' }) });
           else if (url.pathname === '/api/expense/edit') save({ ...data, state: editExpense(data.state, input) });
           else if (url.pathname === '/api/profile') save({ ...data, state: updateProfile(data.state, input) });
@@ -471,7 +473,10 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
     if (!saved?.state?.nessie) { console.error(error.message); process.exit(1); }
     console.warn('Nessie is temporarily unavailable. Serving the saved snapshot with a warning; approvals still require a fresh read.');
   }
-  app.server.listen(3002, '127.0.0.1', () => {
+  // Hosts like Render set PORT and need 0.0.0.0; locally this stays on 127.0.0.1:3002.
+  const port = Number(process.env.PORT) || 3002;
+  const host = process.env.HOST || '127.0.0.1';
+  app.server.listen(port, host, () => {
     writeFileSync('.pocket/device-link.json', JSON.stringify({ token: app.token, port: 3002 }));
     console.log(`Lila connected demo: http://127.0.0.1:3002/pair/${app.token}`);
     console.log(`Phone: use your ngrok HTTPS host with /pair/${app.token}`);

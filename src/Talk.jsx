@@ -66,10 +66,19 @@ export function ChatScreen({ state, navigate, since }) {
   const [error, setError] = useState('');
   // A previous conversation opened read-only from the list under the starters.
   const [openPast, setOpenPast] = useState(null);
+  // Deleting a past chat takes a second tap, since it can't be undone.
+  const [confirming, setConfirming] = useState(null);
   const end = useRef(null);
   const past = pastChats(state.conversation, since);
   const thread = openPast ? openPast.messages : (state.conversation || []).filter(m => m.channel !== 'sms' && m.at && m.at > since);
   useEffect(() => { end.current?.scrollIntoView({ block: 'end' }); }, [thread.length, pending]);
+
+  async function removePast(s) {
+    if (confirming !== s.from) { setConfirming(s.from); return; }
+    setConfirming(null); setError('');
+    try { await store.removeConversation(s.from, s.to); if (openPast?.from === s.from) setOpenPast(null); }
+    catch (e) { setError(e.message); }
+  }
 
   async function send(text) {
     const clean = text.trim();
@@ -95,9 +104,12 @@ export function ChatScreen({ state, navigate, since }) {
         </div>
         {past.length > 0 && <div className="lf-starters lf-past">
           <p>Previous chats</p>
-          {past.map(s => <button key={s.from} className="lf-starter lf-past-chat" onClick={() => setOpenPast(s)}>
-            <span>{s.title}</span><img src={art('chat-arrow-up-right-65c38.svg')} alt="" />
-          </button>)}
+          {past.map(s => <div key={s.from} className="lf-starter lf-past-chat">
+            <button className="lf-past-open" onClick={() => setOpenPast(s)}>
+              <span>{s.title}</span><img src={art('chat-arrow-up-right-65c38.svg')} alt="" />
+            </button>
+            <button className="lf-past-x" aria-label={confirming === s.from ? 'Tap again to delete this chat' : 'Delete this chat'} onClick={() => removePast(s)}>{confirming === s.from ? 'Delete?' : '×'}</button>
+          </div>)}
         </div>}
       </div> : <ol className="lf-thread" aria-live="polite">
         {thread.map((m, i) => <li key={`${m.at}-${i}`} className={`lf-bubble ${m.who === 'You' ? 'from-you' : 'from-lila'}`}>{m.text}</li>)}
@@ -106,7 +118,7 @@ export function ChatScreen({ state, navigate, since }) {
       {error && <p className="lf-talk-note" role="alert">{error}</p>}
       <div ref={end} />
     </div>
-    {openPast ? <p className="lf-talk-note">Previous conversation · {whenLabel(openPast.from)}</p> : <form className="lf-composer" onSubmit={e => { e.preventDefault(); send(draft); }}>
+    {openPast ? <div className="lf-talk-note"><p>Previous conversation · {whenLabel(openPast.from)}</p><button className="lf-past-delete" onClick={() => removePast(openPast)}>{confirming === openPast.from ? 'Tap again to delete this chat' : 'Delete this chat'}</button></div> : <form className="lf-composer" onSubmit={e => { e.preventDefault(); send(draft); }}>
       <img src={art('chat-message-circle-65db2.svg')} alt="" />
       <label className="sr-only" htmlFor="lila-message">Message Lila</label>
       <input id="lila-message" value={draft} onChange={e => setDraft(e.target.value)} placeholder="Type a message to Lila…" maxLength={1000} autoComplete="off" enterKeyHint="send" />
