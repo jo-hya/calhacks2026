@@ -17,6 +17,8 @@ With `ANTHROPIC_API_KEY` set, replies come from a **Claude agent** that reasons 
 the Nessie purchases, offers cheaper alternatives (ALT) or a budget move (KEEP), pays
 approved alternatives through Nessie, and can text location heads-ups. See
 [Claude agent](docs/claude-agent.md). Without the key, a scripted responder answers.
+Lila can also be talked to in the app (Cartesia) and remembers what users tell it (Moss); see
+[Voice and memory](docs/voice-memory.md).
 
 ## Run locally
 
