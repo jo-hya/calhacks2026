@@ -1,4 +1,5 @@
 import { createSeed, isValidState, confirmTransfer, addExpense, proposeTransfer } from './budget.js';
+import { updateProfile, editExpense } from './preferences.js';
 
 export const connected = Boolean(window.__POCKET_CONNECTED__);
 
@@ -63,6 +64,8 @@ export const store = {
   async propose(input) { return connected ? request('proposal', input) : proposeTransfer(snapshot, input); },
   async transfer(proposal) { if (connected) return remote('transfer', { id: proposal.id }); commit(confirmTransfer(warning ? snapshot : load(), proposal)); },
   async addExpense(expense) { if (connected) return remote('expense', expense); commit(addExpense(warning ? snapshot : load(), expense)); },
+  async editExpense(expense) { if (connected) return remote('expense/edit', expense); commit(editExpense(snapshot, expense)); },
+  async updateProfile(input) { if (connected) return remote('profile', input); commit(updateProfile(snapshot, input)); },
   async reset() { if (connected) return remote('reset', {}); commit(createSeed()); },
   message(text) { return remote('message', { text }); },
   async location(position) { const result = await remote('location', position); return result.location; },

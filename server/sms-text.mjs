@@ -1,6 +1,6 @@
 // Bandwidth free trial accounts accept only plain ASCII texts of at most 129 characters
 // (sendSMS in bandwidth.mjs enforces this). Claude's replies are adapted to fit.
-export const SMS_MAX_CHARS = Number(process.env.POCKET_SMS_MAX_CHARS) || 129;
+export const SMS_MAX_CHARS = 128;
 
 const REPLACEMENTS = [[/[‘’‚′]/g, "'"], [/[“”„″]/g, '"'], [/[–—]/g, '-'], [/…/g, '...'], [/[•·]/g, '-'], [/ /g, ' ']];
 

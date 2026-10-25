@@ -113,12 +113,12 @@ test('place kinds map to budget categories', () => {
 });
 
 // A server wired to a fake agent that drives ops the way Claude's tools would.
-async function agentServer(t, { agent, locate, pay = async () => 'p1', send } = {}) {
+async function agentServer(t, { agent, locate, pay = async () => 'p1', send, sync: syncOverride } = {}) {
   const dir = mkdtempSync(join(tmpdir(), 'pocket-agent-'));
   const sent = [];
   const env = { BANDWIDTH_WEBHOOK_TOKEN: 'hook', BANDWIDTH_APPLICATION_ID: 'app', BANDWIDTH_PHONE_NUMBER: '+12025550100', BANDWIDTH_VERIFIED_PHONE_NUMBER: '+12025550101' };
   let syncs = 0;
-  const app = createDemoServer({ file: join(dir, 'state.json'), env, token: 'pair', sync: async s => { syncs++; return s; }, send: send || (async text => { sent.push(text); return `sent-${sent.length}`; }), agent, pay, locate });
+  const app = createDemoServer({ file: join(dir, 'state.json'), env, token: 'pair', sync: async s => { syncs++; return syncOverride ? syncOverride(s, syncs) : s; }, send: send || (async text => { sent.push(text); return `sent-${sent.length}`; }), agent, pay, locate });
   app.server.listen(0, '127.0.0.1'); await once(app.server, 'listening');
   t.after(async () => { await new Promise(r => app.server.close(r)); rmSync(dir, { recursive: true, force: true }); });
   const base = `http://127.0.0.1:${app.server.address().port}`;
@@ -142,6 +142,25 @@ test('texts are answered by the agent and split for SMS', async t => {
   assert.equal(remaining(state, 'dining'), 5500);
   assert.equal(state.adjustments.length, 1);
   assert.equal(state.conversation.at(-1).text, 'Done!');
+});
+
+test('a changed budget invalidates a Claude transfer review', async t => {
+  const agent = async ({ ops, text }) => {
+    if (text === 'DINNER') {
+      await ops.setPending({ kind: 'transfer', from: 'shopping', to: 'dining', amountCents: 1700, turn: 'a' });
+      return 'Move $17?';
+    }
+    await ops.applyPending(ops.pending().id);
+    return 'Done.';
+  };
+  const { api } = await agentServer(t, {
+    agent,
+    sync: (state, count) => count > 1 ? { ...state, revision: state.revision + 1 } : state,
+  });
+  await api('/api/message', { text: 'DINNER' });
+  const state = await api('/api/message', { text: 'YES' });
+  assert.equal(state.adjustments.length, 0);
+  assert.match(state.conversation.at(-1).text, /trouble connecting/);
 });
 
 test('approved ALT payments go through Nessie and are re-imported', async t => {

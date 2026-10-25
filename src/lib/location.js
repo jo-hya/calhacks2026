@@ -1,4 +1,8 @@
 import { store } from './store.js';
+import { Capacitor, registerPlugin } from '@capacitor/core';
+const NativeLocation = registerPlugin('LilaLocation');
+export const nativeLocation = Capacitor.getPlatform() === 'android';
+export const locationStatus = async () => nativeLocation ? NativeLocation.status() : { active: isSharing() };
 
 // Shares the phone's location with Lila while the app is open, so the agent can text a
 // heads-up when you arrive somewhere you'd spend. Browsers (and the Android/iPhone web view)
@@ -18,8 +22,14 @@ function meters(a, b) {
 export const locationSupported = () => 'geolocation' in navigator;
 export const isSharing = () => watchId !== null;
 
-export function startSharing(onUpdate = () => {}, onError = () => {}) {
+export async function startSharing(onUpdate = () => {}, onError = () => {}) {
+  if (nativeLocation) {
+    try { await store.updateProfile({ locationEnabled: true }); await NativeLocation.start(); onUpdate({ reason: 'Nearby heads-ups are on, including when Lila is minimized.' }); }
+    catch (error) { onError(error); throw error; }
+    return;
+  }
   if (watchId !== null || !locationSupported()) return;
+  await store.updateProfile({ locationEnabled: true });
   watchId = navigator.geolocation.watchPosition(async ({ coords }) => {
     const here = { lat: coords.latitude, lng: coords.longitude, at: Date.now() };
     if (last && here.at - last.at < MIN_INTERVAL_MS && meters(last, here) < MIN_MOVE_METERS) return;
@@ -28,8 +38,10 @@ export function startSharing(onUpdate = () => {}, onError = () => {}) {
   }, error => onError(new Error(error.code === 1 ? 'Location permission was denied.' : 'Location is unavailable right now.')), { enableHighAccuracy: true, maximumAge: 30000 });
 }
 
-export function stopSharing() {
+export async function stopSharing() {
+  if (nativeLocation) await NativeLocation.stop();
   if (watchId !== null) navigator.geolocation.clearWatch(watchId);
   watchId = null;
   last = null;
+  await store.updateProfile({ locationEnabled: false });
 }

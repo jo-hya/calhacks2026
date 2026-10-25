@@ -36,9 +36,9 @@ export function importPurchases(state, purchases, merchants, accountId) {
   }
   transactions.sort((a, b) => a.id.localeCompare(b.id));
   const manual = state.transactions.filter(t => t.source === 'manual');
-  const nextTransactions = [...transactions, ...manual];
+  const nextTransactions = [...transactions, ...manual].map(t => state.transactionOverrides?.[t.id] ? { ...t, ...state.transactionOverrides[t.id], edited: true } : t);
   const changed = JSON.stringify(nextTransactions) !== JSON.stringify(state.transactions);
-  return { ...state, transactions: nextTransactions, revision: state.revision + Number(changed), nessie: { accountId, imported: transactions.length, excluded, syncedAt: new Date().toISOString(), source: 'Nessie sandbox' } };
+  return { ...state, importedTransactions: transactions, transactions: nextTransactions, revision: state.revision + Number(changed), nessie: { accountId, imported: transactions.length, excluded, syncedAt: new Date().toISOString(), source: 'Nessie sandbox' } };
 }
 
 export async function syncNessie(state) {
