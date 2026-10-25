@@ -20,6 +20,8 @@ export async function findPlaceMatch({ name, area, lat, lng }, fetchImpl = fetch
   const [hit] = (await response.json()).places || [];
   const match = {};
   if (hit?.photos?.[0]?.name) match.photo = hit.photos[0].name;
+  const author = hit?.photos?.[0]?.authorAttributions?.[0];
+  if (author?.displayName) match.photoAuthor = { name: author.displayName, uri: author.uri || null };
   if (Number.isFinite(hit?.location?.latitude) && Number.isFinite(hit?.location?.longitude)) { match.lat = hit.location.latitude; match.lng = hit.location.longitude; }
   return match;
 }

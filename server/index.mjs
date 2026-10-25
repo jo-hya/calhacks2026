@@ -1,5 +1,5 @@
 import http from 'node:http';
-import { randomBytes } from 'node:crypto';
+import { randomBytes, createHash, timingSafeEqual } from 'node:crypto';
 import { mkdirSync, existsSync, readFileSync, writeFileSync, renameSync } from 'node:fs';
 import { resolve, extname, sep } from 'node:path';
 import { pathToFileURL } from 'node:url';
@@ -16,6 +16,12 @@ import { geocodePlace, locatePlaces } from './geocode.mjs';
 const placeKey = place => `${place.name}|${place.area ?? ''}`.toLowerCase();
 // Saved places stay until removed; a new search adds to them.
 // `search` labels the results with what was asked for, e.g. "Dinner near Mission".
+// The confirmed memory a suggestion says it relies on, matched by its text. Anything that doesn't match is dropped, so tags can't be invented.
+const memoryFor = (memories, because) => {
+  const want = String(because || '').trim().toLowerCase();
+  if (!want) return null;
+  return memories.filter(m => m.confirmed).find(m => { const t = m.text.toLowerCase(); return t === want || t.includes(want) || want.includes(t); }) || null;
+};
 const attempt = async run => { try { return await run(); } catch { return null; } };
 const addRecommendations = (state, found, at, search, category) => {
   const incoming = found.map(place => ({ ...place, id: placeKey(place), savedAt: at, search: search || null, category: category || null, photoChecked: true, coordsChecked: true }));
@@ -41,6 +47,11 @@ const indexDocs = data => [...data.memories.map(memoryDoc), ...data.state.transa
 
 // `agent` is the Claude agent (on when ANTHROPIC_API_KEY is set); without it the scripted
 // responder in conversation.mjs answers, as before.
+// Minimal sign-in page for DEMO_PASSWORD. Messages are fixed strings, never user input.
+function loginPage(message = '') {
+  return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Lila demo</title><style>body{margin:0;min-height:100vh;display:grid;place-items:center;background:#3d1d46;color:#fff;font-family:system-ui,sans-serif}form{display:grid;gap:12px;width:min(88vw,300px)}h1{font-size:1.4rem;margin:0}label{display:grid;gap:6px}input,button{font:inherit;padding:12px;border-radius:12px;border:0}input{background:#ffffff1a;color:#fff;border:1px solid #ffffff55}button{background:#fff;color:#3d1d46;font-weight:600;cursor:pointer}p{margin:0;color:#ffb4b4;min-height:1em}</style></head><body><form method="post" action="/login"><h1>Lila demo</h1><label>Demo password<input type="password" name="password" required autofocus></label><button>Open demo</button><p>${message}</p></form></body></html>`;
+}
+
 export function createDemoServer({ file = '.pocket/state.json', sync = syncNessie, send = sendSMS, env = process.env, initial, token = randomBytes(24).toString('hex'),
   agent = env.ANTHROPIC_API_KEY ? runAgent : null, pay = createAgentPurchase, clearAgentPurchases = deleteAgentPurchases, locate = lookupPlace, geocode = geocodePlace,
   voice = createVoice({ env }), memoryIndex = createMemoryIndex({ env }) } = {}) {
@@ -53,13 +64,18 @@ export function createDemoServer({ file = '.pocket/state.json', sync = syncNessi
   memoryIndex.sync(indexDocs(data));
   const lastNudge = new Map();
   const sessions = new Map(); // session cookie -> expiry time
+  // DEMO_PASSWORD guards a public link: POST /login issues the same session cookie as pairing.
+  const demoPassword = env.DEMO_PASSWORD || '';
+  const digest = text => createHash('sha256').update(text).digest();
+  const signedIn = req => { const session = (req.headers.cookie || '').split(';').map(c => c.trim()).find(c => c.startsWith('pocket='))?.slice('pocket='.length); return Boolean(session) && sessions.get(session) > Date.now(); };
+  const sessionCookie = (req, session) => `pocket=${session}; HttpOnly; SameSite=Strict; Max-Age=${SESSION_MS / 1000}; Path=/${req.headers['x-forwarded-proto'] === 'https' ? '; Secure' : ''}`;
   const paying = new Set();
   let queue = Promise.resolve();
   let syncWarning = '';
   const serial = fn => { const result = queue.then(fn); queue = result.catch(() => {}); return result; };
   // Every save keeps the search index in step with the saved memories and purchases.
   function save(next) { writeFileSync(file + '.tmp', JSON.stringify(next)); renameSync(file + '.tmp', file); data = next; memoryIndex.sync(indexDocs(next)); }
-  function view() { return { ...data.state, recommendations: (data.state.recommendations || []).map(place => ({ ...place, id: placeKey(place) })), connectionWarning: syncWarning, conversation: data.messages, pendingReply: agent ? (livePending() ? 'YES' : null) : data.proposals.simulation ? `YES ${data.proposals.simulation.code}` : null, agentEnabled: Boolean(agent), voiceEnabled: voice.enabled, memories: data.memories, smsStatus: data.outbox.slice(-5).map(o => ({ status: o.status, error: o.error })), phone: env.BANDWIDTH_PHONE_NUMBER || '', invitation: INVITATION }; }
+  function view() { return { ...data.state, recommendations: (data.state.recommendations || []).map(place => ({ ...place, id: placeKey(place) })), connectionWarning: syncWarning, conversation: data.messages, pendingReply: agent ? (livePending() ? 'YES' : null) : data.proposals.simulation ? `YES ${data.proposals.simulation.code}` : null, agentEnabled: Boolean(agent), voiceEnabled: voice.enabled, memorySearch: memoryIndex.kind === 'moss' ? 'Moss' : 'local', memories: data.memories, smsStatus: data.outbox.slice(-5).map(o => ({ status: o.status, error: o.error })), phone: env.BANDWIDTH_PHONE_NUMBER || '', invitation: INVITATION }; }
   async function refresh() {
     try {
       const state = await sync(data.state);
@@ -107,11 +123,16 @@ export function createDemoServer({ file = '.pocket/state.json', sync = syncNessi
       const located = await locatePlaces(items, geocode);
       // Google supplies the photo and, when Nominatim couldn't place it, the location. Failures keep the place as is.
       const places = [];
+      const used = [];
       for (const place of located) {
         const match = await attempt(() => findPlaceMatch(place)) ?? {};
-        places.push({ ...place, ...(match.photo ? { photo: match.photo } : {}), ...(place.lat == null && match.lat != null ? { lat: match.lat, lng: match.lng } : {}) });
+        const { because, ...rest } = place;
+        const memory = memoryFor(data.memories, because);
+        if (memory) used.push(memory.text);
+        places.push({ ...rest, ...(memory ? { because: memory.text } : {}), ...(match.photo ? { photo: match.photo, ...(match.photoAuthor ? { photoAuthor: match.photoAuthor } : {}) } : {}), ...(place.lat == null && match.lat != null ? { lat: match.lat, lng: match.lng } : {}) });
       }
-      return serial(() => { save({ ...data, state: addRecommendations(data.state, places, new Date().toISOString(), search, category) }); });
+      await serial(() => { save({ ...data, state: addRecommendations(data.state, places, new Date().toISOString(), search, category) }); });
+      return used;
     },
     pending: livePending,
     history: () => data.agent.history,
@@ -207,11 +228,13 @@ export function createDemoServer({ file = '.pocket/state.json', sync = syncNessi
   const log = (...messages) => serial(() => { const at = new Date().toISOString(); save({ ...data, messages: [...data.messages, ...messages.map(m => ({ ...m, at }))].slice(-100) }); });
   // Saved places from before photos and map pins existed get them once. Failed lookups are remembered so they aren't retried on every start.
   async function fillPhotos() {
-    const pending = (data.state.recommendations || []).filter(place => (!place.photo && !place.photoChecked) || (place.lat == null && !place.coordsChecked));
+    const pending = (data.state.recommendations || []).filter(place => (!place.photo && !place.photoChecked) || (place.lat == null && !place.coordsChecked) || (place.photo && !place.photoAuthor && !place.authorChecked));
     for (const place of pending) {
       const update = {};
       const match = await attempt(() => findPlaceMatch(place)) ?? {};
       if (!place.photo && !place.photoChecked) { update.photo = match.photo ?? null; update.photoChecked = true; }
+      // Credits only apply when the lookup returned the same photo that is saved.
+      if (place.photo && !place.photoAuthor && !place.authorChecked) { update.photoAuthor = match.photo === place.photo ? match.photoAuthor ?? null : null; update.authorChecked = true; }
       if (place.lat == null && !place.coordsChecked) {
         const coords = match.lat != null ? { lat: match.lat, lng: match.lng } : await attempt(() => geocode(place));
         Object.assign(update, coords ?? {});
@@ -238,9 +261,10 @@ export function createDemoServer({ file = '.pocket/state.json', sync = syncNessi
       });
     }
     let answer;
-    try { answer = await agent({ ops, text, trigger: ['sms', 'voice'].includes(channel) ? channel : 'simulation', bankFresh: fresh }); }
+    const remembered = new Set();
+    try { answer = await agent({ ops, text, trigger: ['sms', 'voice'].includes(channel) ? channel : 'simulation', bankFresh: fresh, onMemoryUsed: fact => remembered.add(fact) }); }
     catch (error) { console.error('Agent error:', error.message); answer = TROUBLE; }
-    await log({ who: 'You', text, channel }, { who: 'Lila', text: answer, channel });
+    await log({ who: 'You', text, channel }, { who: 'Lila', text: answer, channel, ...(remembered.size ? { remembered: [...remembered] } : {}) });
     return answer;
   }
 
@@ -301,6 +325,20 @@ export function createDemoServer({ file = '.pocket/state.json', sync = syncNessi
       }
       // The printed pairing token only exchanges for a random session cookie, so the link
       // itself is never a bearer credential for the API. Sessions expire and reset on restart.
+      if (url.pathname === '/login' && req.method === 'GET') {
+        if (!demoPassword || signedIn(req)) { res.writeHead(303, { Location: '/' }); res.end(); return; }
+        res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' }); res.end(loginPage()); return;
+      }
+      if (url.pathname === '/login' && req.method === 'POST') {
+        if (!demoPassword) return json(404, { error: 'Not found' });
+        let form = ''; for await (const chunk of req) { form += chunk; if (form.length > 1000) break; }
+        const submitted = new URLSearchParams(form).get('password') || '';
+        await new Promise(resolve => setTimeout(resolve, 500)); // slows down guessing
+        if (!timingSafeEqual(digest(submitted), digest(demoPassword))) { res.writeHead(401, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' }); res.end(loginPage('That password is not right.')); return; }
+        const session = randomBytes(32).toString('hex');
+        sessions.set(session, Date.now() + SESSION_MS);
+        res.writeHead(303, { 'Set-Cookie': sessionCookie(req, session), Location: '/', 'Referrer-Policy': 'no-referrer' }); res.end(); return;
+      }
       if (url.pathname === `/pair/${token}` && req.method === 'GET') {
         const session = randomBytes(32).toString('hex');
         sessions.set(session, Date.now() + SESSION_MS);
@@ -395,6 +433,8 @@ export function createDemoServer({ file = '.pocket/state.json', sync = syncNessi
         });
         return json(200, result);
       }
+      // With a demo password, the app and its files are only for signed-in visitors.
+      if (demoPassword && !signedIn(req)) { res.writeHead(303, { Location: '/login' }); res.end(); return; }
       if (req.method !== 'GET') return json(404, { error: 'Not found' });
       const root = resolve('dist');
       const target = resolve(root, '.' + decodeURIComponent(url.pathname === '/' ? '/index.html' : url.pathname));
@@ -468,7 +508,8 @@ export function createDemoServer({ file = '.pocket/state.json', sync = syncNessi
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   // PAIR_TOKEN keeps the same pairing link across restarts; unset, a new random token is made each start.
-  const app = createDemoServer({ token: process.env.PAIR_TOKEN || undefined });
+  // Without a Nessie key (a hosted demo), start from the seed instead of failing.
+  const app = createDemoServer({ token: process.env.PAIR_TOKEN || undefined, ...(process.env.NESSIE_API_KEY ? {} : { sync: async state => state }) });
   try { await app.refresh(); } catch (error) {
     const saved = existsSync('.pocket/state.json') && JSON.parse(readFileSync('.pocket/state.json', 'utf8'));
     if (!saved?.state?.nessie) { console.error(error.message); process.exit(1); }

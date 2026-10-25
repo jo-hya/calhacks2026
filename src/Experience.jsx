@@ -104,6 +104,16 @@ export function LocationControl({ state }) {
   return <div className="location-control"><div><strong>Nearby heads-ups</strong><span>{status.active ? 'On · looking out for your budget' : 'Off · your location stays private'}</span></div><button className="button secondary" disabled={busy || !connected} onClick={toggle}>{busy ? 'One moment…' : status.active ? 'Pause' : 'Enable'}</button><p>{nativeLocation ? 'Allow location to get a text near spending spots, even when you switch apps or lock your phone. Pause anytime.' : 'Location works while this page is open. Background heads-ups are available in the Android app.'}</p>{status.active && status.message && <p role="status">{status.message}</p>}{error && <p role="alert" className="form-error">{error}</p>}</div>;
 }
 
+// The tag on a suggestion, worded as the saved preference it came from.
+const becauseLabel = text => `Because you like ${text.charAt(0).toLowerCase()}${text.slice(1)}`;
+
+// Google requires showing who took a place's photo.
+function PhotoCredit({ place }) {
+  if (!place.photo || !place.photoAuthor) return null;
+  const { name, uri } = place.photoAuthor;
+  return <small className="lf-photo-credit">Photo: {uri ? <a href={uri} target="_blank" rel="noreferrer" onClick={e => e.stopPropagation()}>{name}</a> : name}</small>;
+}
+
 export function Nearby({ state, onAdd, request }) {
   const profile = { ...DEFAULT_PROFILE, ...state.profile };
   const loc = state.lastLocation;
@@ -182,7 +192,7 @@ export function Nearby({ state, onAdd, request }) {
   async function find(request) {
     setBusy(true); setError('');
     const ask = request ? `Find ${request.ask} I can afford on about ${money(request.budgetCents)} per person or less near ${area}.` : `Find up to 5 cheaper dining options near ${area}.`;
-    try { await store.message(`${ask} My preferences: ${profile.preferences || 'flexible'}. Read my dining budget and save the researched recommendations to the app. Include source links and label prices as estimates. Do not propose purchases.`); }
+    try { await store.message(`${ask} My preferences: ${profile.preferences || 'flexible'}. Saved preferences: ${(state.memories || []).filter(m => m.confirmed).map(m => m.text).join('; ') || 'none'}. When a place fits one of the saved preferences, set its because field to that exact text. Read my dining budget and save the researched recommendations to the app. Include source links and label prices as estimates. Do not propose purchases.`); }
     catch(e) { setError(e.message); } finally { setBusy(false); }
   }
   return <div className="lf-screen lf-nearby">
@@ -192,8 +202,8 @@ export function Nearby({ state, onAdd, request }) {
       <LilaBrand />
       <PlusButton label="Add a purchase" onClick={onAdd} />
       {selectedPlace && <div className="lf-map-card" role="dialog" aria-label={selectedPlace.name}>
-        <div className="lf-place-thumb" aria-hidden="true">{selectedPlace.photo ? <img src={`/api/place-photo?name=${encodeURIComponent(selectedPlace.photo)}`} alt="" /> : selectedPlace.name.slice(0,1)}</div>
-        <div className="lf-map-card-body"><h2>{selectedPlace.name}</h2><p>{selectedPlace.description}</p>
+        <div className="lf-place-media"><div className="lf-place-thumb" aria-hidden="true">{selectedPlace.photo ? <img src={`/api/place-photo?name=${encodeURIComponent(selectedPlace.photo)}`} alt="" /> : selectedPlace.name.slice(0,1)}</div><PhotoCredit place={selectedPlace} /></div>
+        <div className="lf-map-card-body"><h2>{selectedPlace.name}</h2><p>{selectedPlace.description}</p>{selectedPlace.because && <small className="lf-because">{becauseLabel(selectedPlace.because)}</small>}
           <div className="lf-place-more"><span>About {money(Math.round(selectedPlace.estimatedPrice*100))} per person · estimate</span><a href={selectedPlace.sourceUrl} target="_blank" rel="noreferrer">Details ↗</a><a href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(selectedPlace.name+' '+selectedPlace.area)}`} target="_blank" rel="noreferrer">Directions ↗</a></div>
         </div>
         <button className="lf-map-card-close" aria-label="Close place" onClick={() => setSelected(null)}>×</button>
@@ -206,8 +216,8 @@ export function Nearby({ state, onAdd, request }) {
         <p className="lf-places-day">{label} · {dayOf(items[0])}</p>
         {items.map(p => { const i = ordered.indexOf(p); return <Fragment key={p.id}>
         <article className={`lf-place${p.id === selected ? ' selected' : ''}`} ref={el => { cards.current[p.id] = el; }} tabIndex={0} onClick={() => choose(p.id)} onKeyDown={e => { if (e.key === 'Enter') choose(p.id); }} aria-current={p.id === selected || undefined}>
-          <div className="lf-place-thumb" aria-hidden="true">{p.photo ? <img src={`/api/place-photo?name=${encodeURIComponent(p.photo)}`} alt="" loading="lazy" /> : p.name.slice(0,1)}</div>
-          <div className="lf-place-body"><h2>{i+1}. {p.name}</h2><p>{p.description}</p>
+          <div className="lf-place-media"><div className="lf-place-thumb" aria-hidden="true">{p.photo ? <img src={`/api/place-photo?name=${encodeURIComponent(p.photo)}`} alt="" loading="lazy" /> : p.name.slice(0,1)}</div><PhotoCredit place={p} /></div>
+          <div className="lf-place-body"><h2>{i+1}. {p.name}</h2><p>{p.description}</p>{p.because && <small className="lf-because">{becauseLabel(p.because)}</small>}
             {p.id === selected && <div className="lf-place-more"><span>About {money(Math.round(p.estimatedPrice*100))} per person · estimate</span><a href={p.sourceUrl} target="_blank" rel="noreferrer">Details ↗</a><a href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(p.name+' '+p.area)}`} target="_blank" rel="noreferrer">Directions ↗</a></div>}
             <button className="lf-place-remove" onClick={e => { e.stopPropagation(); remove(p.id); }}>Remove</button>
           </div>
