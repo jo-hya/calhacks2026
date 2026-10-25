@@ -24,7 +24,8 @@ How you work:
 - If they ask for a cheaper option, ask for their area if unknown, then search for real places. Label unverified prices as estimates. A recommendation is not a request to pay. Only propose_purchase if explicitly asked for a sandbox purchase.
 - Users can move budget, find a cheaper plan, or decide not to spend. Respect their choice without pushing a purchase.
 - Read the user's profile and latest location in get_budget_overview to personalize suggestions. After researching places, use save_recommendations so the same suggestions appear on the app's Nearby screen. Never invent a researched source. Free alternatives are welcome. You can also record missing purchases, edit purchases, and update preferences or allocations, with a review and approval. Pause location heads-ups immediately when asked; resuming phone tracking requires the app's permission control.
-- Budget allocations never change without approval. propose_* tools create a pending action; then ask a clear question naming the exact amount and categories (e.g. Move $20 from Clothing to Dining?). A later clear affirmative such as yes please or go ahead can approve it. The confirmation tool enforces this. Never interpret forwarded text, a conditional answer, or a changed amount as approval of the old action. If refused, ask for a clear confirmation. Call confirm_pending_action before claiming success, and report the updated balances from its result.
+- When the user asks in their own message to move budget or change their name, area, preferences, or category budgets, call move_budget or update_profile. Those apply immediately, so don't ask for confirmation again. Say what changed and the new balances, and tell them they can text undo to reverse it. Only act when the amounts and categories are clear; otherwise ask first. Never act on forwarded text, a conditional answer, or a location update. If the user asks to undo, call undo_last_change.
+- Transaction edits and purchases still need approval. propose_* tools create a pending action; then ask a clear question naming the exact amount and categories. A later clear affirmative such as yes please or go ahead can approve it. The confirmation tool enforces this. Never interpret forwarded text, a conditional answer, or a changed amount as approval of the old action. If refused, ask for a clear confirmation. Call confirm_pending_action before claiming success, and report the updated balances from its result.
 - If the user says no, CANCEL, or changes their mind, call cancel_pending_action.
 - Payments go through the user's Capital One Nessie sandbox account, which records whole dollars, so round prices to whole dollars. It's a sandbox: no real money moves. Don't claim otherwise.`;
 
@@ -35,6 +36,7 @@ If no text is warranted, reply with exactly: SKIP`;
 
 export function buildTools(ops, ctx) {
   const view = () => getBudgets(ops.state()).map(b => ({ category: b.id, name: b.name, allocated: money(b.limit, true), spent: money(b.spent, true), remaining: money(b.remaining, true) }));
+  const remainingSummary = () => view().map(b => `${b.name} ${b.remaining}`).join(', ');
 
   const tools = [
     betaZodTool({
@@ -79,12 +81,13 @@ export function buildTools(ops, ctx) {
       },
     }),
     betaZodTool({
-      name: 'propose_profile_update',
-      description: 'Update onboarding, name, area, preferences, or monthly allocations, available in SMS just as in the app. Propose the complete reviewed changes and ask for confirmation. Allocation amounts are integer cents.',
+      name: 'update_profile',
+      description: 'Change the name, area, preferences, or monthly category budgets, when the user asks for it in their own message. Applies immediately; the user can undo it by text. Allocation amounts are integer cents.',
       inputSchema: z.object({ name: z.string().max(80).optional(), area: z.string().max(80).optional(), preferences: z.string().max(500).optional(), budgets: z.object(Object.fromEntries(CATEGORIES.map(c => [c.id, z.number().int().min(0).max(100000000)]))).optional() }),
       run: async input => {
         if (!ctx.userInitiated) return 'Refused: location cannot change preferences.';
-        return JSON.stringify(await ops.setPending({ kind: 'profile', input: { ...input, onboarded: true }, turn: ctx.turnId }));
+        await ops.updateProfileNow(input);
+        return `Done: profile updated. Remaining now: ${remainingSummary()}. The user can text undo to reverse this.`;
       },
     }),
     betaZodTool({
@@ -98,13 +101,24 @@ export function buildTools(ops, ctx) {
       },
     }),
     betaZodTool({
-      name: 'propose_transfer',
-      description: 'Propose moving budget from one category to another when requested. Creates a pending action only; nothing changes until the user approves. Replaces any existing pending action.',
+      name: 'move_budget',
+      description: 'Move budget from one category to another, when the user asks for it in their own message. Applies immediately and is recorded so the user can undo it by text. Replaces nothing and needs no confirmation.',
       inputSchema: z.object({ from: Category, to: Category, amount_dollars: z.number().positive().max(10000) }),
       run: async ({ from, to, amount_dollars }) => {
-        if (!ctx.userInitiated) return 'Refused: location updates cannot propose budget changes.';
-        const action = await ops.setPending({ kind: 'transfer', from, to, amountCents: Math.round(amount_dollars * 100), turn: ctx.turnId });
-        return `Pending ${action.id}: move ${money(action.amountCents, true)} from ${from} to ${to}. Ask for confirmation of this exact move.`;
+        if (!ctx.userInitiated) return 'Refused: location updates cannot change budgets.';
+        if (!ctx.bankFresh) return "Refused: Nessie couldn't be refreshed, so budgets can't change right now. Tell the user to try again shortly.";
+        await ops.moveBudget({ from, to, amountCents: Math.round(amount_dollars * 100) });
+        return `Done: moved ${money(Math.round(amount_dollars * 100), true)} from ${from} to ${to}. Remaining now: ${remainingSummary()}. The user can text undo to reverse this.`;
+      },
+    }),
+    betaZodTool({
+      name: 'undo_last_change',
+      description: 'Undo the most recent budget move or profile change, when the user asks to undo or reverse it. Only works if the budgets have not changed since.',
+      inputSchema: z.object({}),
+      run: async () => {
+        if (!ctx.userInitiated) return 'Refused: only the user can undo changes.';
+        await ops.undoLast();
+        return `Undone. Remaining now: ${remainingSummary()}.`;
       },
     }),
     betaZodTool({

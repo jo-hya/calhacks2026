@@ -5,6 +5,7 @@ const KINDS = [
   ['groceries', ['supermarket', 'grocery', 'greengrocer', 'convenience', 'deli', 'butcher']],
   ['shopping', ['clothes', 'shoes', 'mall', 'department_store', 'boutique', 'books', 'gift', 'jewelry', 'electronics']],
   ['transport', ['fuel', 'parking', 'taxi', 'car_rental', 'charging_station']],
+  ['social', ['cinema', 'theatre', 'bowling_alley', 'arts_centre', 'nightclub', 'club', 'events_venue']],
 ];
 
 export function categoryForKind(kind) {

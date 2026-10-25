@@ -6,9 +6,23 @@
 
 **We are in Phase 5: integration validation and real-phone rehearsal, with Phase 6 demo packaging next.** The frontend, shared demo backend, Nessie importer, Bandwidth webhook, and Claude agent are implemented. This is beyond the original browser-only prototype. It is a single-user connected hackathon demo, not yet a production multi-user app.
 
+**Last update (October 24, late evening):** budget moves and profile changes requested by text now apply immediately and can be undone by text; Nearby shows a Leaflet map with one pin per recommended place, and tapping a card or pin highlights it; Home matches the Figma V2 frame; the Android build with these changes is installed on the presentation phone. Live Claude text flow was checked once (move, then undo). Not yet verified: screen-off background location, and the Nearby map on the handset with real recommendations.
+
+**Design decision:** the user asked that budget moves requested in their own message apply without a second confirmation, with undo by text. This relaxes the earlier "approval before any budget change" rule for budget moves and profile changes only. Transaction edits and purchases still require an explicit YES. Forwarded text and location updates still cannot change budgets.
+
 The original plan assumed Supabase would precede integration. The implemented demo instead uses one Node process, serialized mutations, and file-backed state. That enables the connected demo now; it does not complete the original Supabase/authentication/database-transaction requirements. Production hardening remains a separate unfinished milestone.
 
 **Immediate gate for the existing demo:** prove the current Claude -> real SMS -> shared budget -> actual phone UI flow repeatedly, close the approval gaps below, and capture a backup recording. Do not mark the core demo complete based only on mocked tests or the older scripted browser rehearsal.
+
+## Next steps (ordered, as of October 24 late evening)
+
+1. **Screen-off location test on the presentation phone:** lock the phone after tapping Arrive (or start Nearby heads-ups), confirm a heads-up text arrives and the notification shows. Fix anything that fails before anything else.
+2. **Full dinner rehearsal on the handset:** reset, forward the $55 invitation, confirm the $17 shortfall, approve the $20 move by text, and check the app shows $58 / $40 with one entry. Then rehearse "undo" by text.
+3. **Nearby on the handset with real recommendations:** ask Lila for places, confirm pins appear and card or pin taps highlight correctly.
+4. **Pending-action revision check for transaction edits and purchases** (Phase 3 item above).
+5. **Figma gaps:** Location Recommender photos and the Weekly pill on the map. Dashboard and Home already match.
+6. **Onboarding and transaction editing:** both are required, but only in minimal form. Group planning stays a stretch goal.
+7. **Backup recording and submission assets** once steps 1 and 2 pass on the handset.
 
 ## Product direction clarified after the implementation review
 
@@ -68,7 +82,8 @@ The user has now expanded the intended MVP beyond the dinner-transfer demo. The 
 - [x] Claude tool guards require a later user-initiated exact `YES`, the pending action captured at turn start, and a successful Nessie refresh. Forwarded text and location updates cannot themselves approve actions.
 - [x] Persist payment attempts before Nessie submission; uncertain attempts reconcile against Nessie after restart without submitting another purchase. Automated coverage exists.
 - [x] Persist callback IDs/outbound status and test duplicate callbacks, provider failures, and budget commits surviving outbound failure.
-- [ ] **Close the Claude stale-proposal gap:** `setPending` validates a transfer but discards that validation proposal; `applyPending` creates a new proposal against current state. Available funds are rechecked, but a changed financial revision does not necessarily force fresh user approval. Preserve the original relevant revision and test intervening purchases/allocation changes.
+- [x] Budget moves and profile changes from the user's own text apply immediately (`move_budget`, `update_profile`), are refused for location turns and stale bank data, and can be reversed with `undo_last_change` while the budgets still match the change. Covered by agent and server tests, plus one live Claude move/undo check.
+- [ ] **Close the Claude stale-proposal gap for pending transaction edits and purchases:** these still go through `setPending`/`applyPending`. Revision checks exist for edits and expenses; purchases should be checked the same way. Test intervening purchases/allocation changes. (Budget moves no longer use pending proposals.)
 - [ ] Verify/isolate pending actions across browser and SMS in Claude mode. The scripted responder uses channel-specific proposals; Claude currently shares one pending action and conversation history.
 - [ ] Add targeted coverage for overlapping Claude turns/confirmations and restart boundaries between action commit, inbox completion, and reply queuing. Existing callback tests do not prove every crash window or concurrent agent interaction.
 - [ ] For production, replace process-local serialization/file replacement with authenticated transactional storage and multi-instance concurrency guarantees.
@@ -82,12 +97,16 @@ The user has now expanded the intended MVP beyond the dinner-transfer demo. The 
 - [x] Browser text rehearsal uses shared server state; browser-only mode remains available separately.
 - [x] Installable web app assets and pairing instructions are present.
 - [x] Capacitor Android project and USB build/run scripts are present; no Expo migration is needed.
-- [ ] Run the current build on the presentation phone and verify pairing, readable balances, activity updates, reconnect, and reset.
+- [x] Home matches the Figma "Home Screen - Final V2" frame (daily-spend chart with Weekly pill and callout, suggestion line). Dashboard matches "Dashboard - Final". Location Recommender is close; photos and the Weekly pill on the map are missing.
+- [ ] Run the current build on the presentation phone and verify pairing, readable balances, activity updates, reconnect, and reset. (Installed and launched on the handset on October 24; the Home screen renders. Reset and balance checks still open.)
 - [ ] Confirm the chosen setup works throughout the demo: Android debug app needs the laptop backend and USB port forwarding; public browser access and inbound SMS use the tunnel.
 
 **Completion gate:** a backend-approved $20 move visibly changes the actual presentation UI to $58 / $40 with one adjustment entry.
 
 ## Phase 5 - Claude/SMS integration and rehearsal: current focus
+
+- [x] Text budget moves and profile changes apply immediately, with undo by text (see Phase 3). Live check: "move $10 from Groceries to Dining" then "undo that" restored the balances.
+- [x] Nearby recommendations are geocoded (OpenStreetMap) and shown as Leaflet map pins; tapping a card or pin highlights both. Verified in a browser screenshot; not yet on the handset with real recommendations.
 
 - [x] Claude tool loop and bounded text history are wired into `server/agent.mjs` and the shared server when `ANTHROPIC_API_KEY` is set.
 - [x] Scripted responder remains available when no Claude key is configured. A runtime Claude error produces a failure response; it does not transparently switch to the scripted responder.
@@ -127,7 +146,9 @@ The user has now expanded the intended MVP beyond the dinner-transfer demo. The 
 - [x] Foreground location lookup, simulated place buttons, and cooldown-based SMS nudges are implemented; live device/provider verification remains open.
 - [ ] Fetch.ai orchestration is not integrated. Decide whether it is required for the intended submission before adding it.
 - [ ] Social/group budgets and voice are not implemented.
-- [ ] Native background location, push/geofencing infrastructure, native iOS packaging, store release, and real payment rails are not implemented.
+- [x] Native Android location service exists (foreground service of type location, Pause action, runtime permission, posts to the backend over `adb reverse`). Code review only; screen-off behavior is unverified on the handset.
+- [ ] Screen-off / app-minimized location heads-up verified on the presentation phone. This is the highest-risk open item for the demo.
+- [ ] Push/geofencing infrastructure, native iOS packaging, store release, and real payment rails are not implemented. The notification permission (Android 13+) is not requested, so the Pause notification may be hidden.
 
 **Scope:** location and cheaper alternatives are now part of the intended product. A limited demo cut may be necessary within 12 hours; this has not yet been agreed with the user. Nessie purchases use sandbox money; budget transfers only change allocations. A category allocation does not establish overall financial affordability. Forwarding is user initiated; the app does not read unrelated private conversations.
 

@@ -14,7 +14,8 @@ function load() {
     if (!raw) return createSeed();
     const parsed = JSON.parse(raw);
     if (!isValidState(parsed)) throw new Error('Invalid saved demo');
-    return parsed;
+    // Saved demos from before a category existed get its seed budget and plans.
+    return { ...parsed, budgets: { ...createSeed().budgets, ...parsed.budgets }, plans: parsed.plans ?? createSeed().plans };
   } catch {
     warning = 'Saved demo data could not be loaded. The starting budget is shown; reset the demo to start fresh.';
     return snapshot;
@@ -68,6 +69,7 @@ export const store = {
   async updateProfile(input) { if (connected) return remote('profile', input); commit(updateProfile(snapshot, input)); },
   async reset() { if (connected) return remote('reset', {}); commit(createSeed()); },
   message(text) { return remote('message', { text }); },
+  demoArrival(delaySeconds) { return remote('demo-arrival', { delaySeconds }); },
   async location(position) { const result = await remote('location', position); return result.location; },
   sync() { return remote('sync', {}); },
 };
