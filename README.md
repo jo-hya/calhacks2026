@@ -1,6 +1,83 @@
 # Lila
 
-A simple budget app for making room for everyday life. Built with React and Vite for Cal Hacks 13.0.
+**Ask out loud before you buy.** Lila is a voice-first spending companion. Money decisions
+happen when your hands and eyes are busy: walking into a restaurant with friends, standing at a
+checkout. Nobody opens a budgeting app then. With Lila you ask *"Can I do dinner tonight?"* and
+hear a straight answer in a few seconds, grounded in your real budget and purchases, with a
+cheaper option if it won't fit. Built for Cal Hacks 13.0.
+
+## The voice flow
+
+1. Tap the mic and say: *"My friends want a $55 dinner tonight. Can I? I'm vegetarian."*
+2. Lila answers out loud: dining has $38 left, so it's $17 over. Move money from Clothing, or
+   find somewhere cheaper?
+3. *"Somewhere cheaper."* She finds real nearby vegetarian spots (she remembered) that fit.
+4. *"Yes."* The payment goes through the Capital One sandbox account and the budgets on screen
+   update. Nothing moves until you say yes.
+
+The same agent also answers texts, so a conversation can start by voice and finish by SMS.
+
+## What Cartesia does
+
+| | Cartesia | Where |
+|---|---|---|
+| Hearing you | **Ink** speech-to-text (`ink-whisper`, batch). Chrome/Android `webm` and Safari `mp4` recordings | `server/voice.mjs` `transcribe()` |
+| Lila's voice | **Sonic** text-to-speech (`sonic-3.5`, MP3) with a chosen voice (`db6b0ed5-…`) | `server/voice.mjs` `speak()` |
+| Speaking style | Replies on the voice channel are told they'll be read aloud: one or two short sentences, no lists or symbols, "just say yes" | `server/agent.mjs` `VOICE_RULES` |
+| Speaker button off | Answers come back as captions only; no speech is generated | `?speak=0` / `speak: false` |
+| Read aloud | Any text (e.g. a location heads-up) can be spoken | `POST /api/speak` |
+
+Other tools: **Claude** decides what to say and when to propose moving money; **Moss** is Lila's
+memory (preferences you've told her plus your purchases, searched in milliseconds before each
+reply); **Capital One Nessie** holds the sandbox account and purchases; **Bandwidth** sends
+texts. API details: [Voice and memory](docs/voice-memory.md).
+
+## Setup
+
+Node.js 22.18+.
+
+```sh
+npm install
+cp .env.example .env    # fill in your own keys (never commit .env)
+npm run nessie:seed     # first time only: creates the sandbox account; add the printed NESSIE_ACCOUNT_ID to .env
+npm run build
+npm run demo            # prints a private pairing link; open it, then tap the mic
+```
+
+Keys in `.env`: `ANTHROPIC_API_KEY`, `CARTESIA_API_KEY`, `MOSS_PROJECT_ID` / `MOSS_PROJECT_KEY`,
+`NESSIE_API_KEY`, and the `BANDWIDTH_*` values for texting. Startup prints
+`Voice: on (Cartesia) · Memory search: Moss` when voice and memory are configured. The mic needs
+`127.0.0.1` on the laptop or HTTPS on a phone (`ngrok http 3002`, then open the pairing link on
+the ngrok address). No keys or secrets are in the repo.
+
+## Responsibility, privacy and accessibility
+
+- **No always-on listening.** Audio is only sent while the voice screen is open and not muted;
+  recordings are transcribed and discarded, never stored.
+- **Money never moves on its own.** Lila can only propose; a transfer or payment needs the
+  user's own "yes" in a later message, enforced in code (a forwarded "YES" or a location update
+  doesn't count). If something fails mid-way, Lila says the action *may* have completed rather
+  than claiming nothing changed.
+- **Memory you can see and delete.** Lila only remembers what you say about yourself (never
+  account numbers or passwords); the app lists it with Undo, and "forget that" works. Demo reset
+  clears it.
+- **Not voice-only.** Every answer has a text caption, there's a text box, and the speaker
+  button turns speech off, for noisy places, quiet places, and deaf or hard-of-hearing users.
+- **Sandbox only.** Nessie is a test bank; no real money moves.
+
+## Known limitations
+
+- **Not streamed yet:** Lila starts speaking after the whole answer is ready (a few seconds).
+  Next step: stream Claude's reply into Cartesia's streaming TTS so speech starts in under a
+  second.
+- One demo user (Sam); no accounts.
+- Location heads-ups only while the app is open (no background location).
+- Bandwidth's free trial texts a single verified phone, 129 characters per text.
+- Nessie stores whole dollars, so amounts are rounded.
+
+---
+
+## Developer notes
 
 ## Connected SMS + Nessie demo
 

@@ -19,9 +19,9 @@ export function createVoice({ env = process.env, client } = {}) {
     // Returns MP3 bytes, which every browser and the Android web view can play.
     async speak(text) {
       const response = await cartesia.tts.generate({
-        model_id: env.CARTESIA_TTS_MODEL || 'sonic-3',
+        model_id: env.CARTESIA_TTS_MODEL || 'sonic-3.5',
         transcript: text,
-        voice: env.CARTESIA_VOICE_ID || 'e07c00bc-4134-4eae-9ea4-1a55fb45746b',
+        voice: env.CARTESIA_VOICE_ID || 'db6b0ed5-d5d3-463d-ae85-518a07d3c2b4', // Lila's voice
         output_format: { container: 'mp3', sample_rate: 44100, bit_rate: 128000 },
         language: 'en',
       });
