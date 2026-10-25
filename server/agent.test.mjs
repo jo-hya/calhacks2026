@@ -10,6 +10,7 @@ import { buildTools, runAgent } from './agent.mjs';
 import { splitSms, toSmsAscii } from './sms-text.mjs';
 import { categoryForKind } from './place.mjs';
 import { createDemoServer } from './index.mjs';
+import { pairedCookie } from './test-helpers.mjs';
 
 process.env.POCKET_WEB_SEARCH = 'off';
 const remaining = (state, id) => getBudgets(state).find(b => b.id === id).remaining;
@@ -144,7 +145,8 @@ async function agentServer(t, { agent, locate, geocode = async () => null, pay =
   app.server.listen(0, '127.0.0.1'); await once(app.server, 'listening');
   t.after(async () => { await new Promise(r => app.server.close(r)); rmSync(dir, { recursive: true, force: true }); });
   const base = `http://127.0.0.1:${app.server.address().port}`;
-  const api = (path, value) => fetch(base + path, { method: value ? 'POST' : 'GET', headers: { Cookie: 'pocket=pair', 'Content-Type': 'application/json' }, body: value && JSON.stringify(value) }).then(r => r.json());
+  const cookie = await pairedCookie(base, 'pair');
+  const api = (path, value) => fetch(base + path, { method: value ? 'POST' : 'GET', headers: { Cookie: cookie, 'Content-Type': 'application/json' }, body: value && JSON.stringify(value) }).then(r => r.json());
   const text = (id, body) => fetch(base + '/webhooks/bandwidth?token=hook', { method: 'POST', body: JSON.stringify([{ type: 'message-received', message: { id, text: body, from: env.BANDWIDTH_VERIFIED_PHONE_NUMBER, to: [env.BANDWIDTH_PHONE_NUMBER], applicationId: 'app' } }]) }).then(() => app.resume());
   return { app, api, text, sent, syncs: () => syncs };
 }

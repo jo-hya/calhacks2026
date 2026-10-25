@@ -146,3 +146,10 @@
 .voice-speaker:not(.on){background:#fff;color:#3d1d46;border-color:#e4dce6}
 .nearby-map .map-weekly,.nearby-top{z-index:500}
 .nearby-map .leaflet-host{z-index:0}
+
+.memory-list { display: grid; gap: 10px; margin: 8px 0; }
+.memory-list h2 { font-size: 1rem; margin: 0; }
+.memory-row { display: grid; gap: 4px; padding: 12px; border-radius: 12px; background: rgba(0, 0, 0, 0.04); }
+.memory-row p { margin: 0; }
+.memory-row small { color: #6b6b75; }
+.memory-row .modal-actions { justify-content: flex-start; margin-top: 4px; }

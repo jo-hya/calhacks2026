@@ -21,6 +21,7 @@ const DEMO_ARRIVAL = { place: 'Gather', category: 'dining', lat: 37.8697, lng: -
 const MAX_HISTORY = 24;
 const MAX_AUDIO_BYTES = 5 * 1024 * 1024;
 const MAX_MEMORIES = 50;
+const SESSION_MS = 7 * 24 * 60 * 60 * 1000;
 const TROUBLE = 'Lila is having trouble connecting. An approved action may have completed. Check the app before trying again.';
 // Everything Lila can search for: saved memories and purchases.
 const indexDocs = data => [...data.memories.map(memoryDoc), ...data.state.transactions.map(transactionDoc)];
@@ -38,6 +39,7 @@ export function createDemoServer({ file = '.pocket/state.json', sync = syncNessi
   // Search covers what the user told Lila plus their purchases.
   memoryIndex.sync(indexDocs(data));
   const lastNudge = new Map();
+  const sessions = new Map(); // session cookie -> expiry time
   const paying = new Set();
   let queue = Promise.resolve();
   let syncWarning = '';
@@ -123,13 +125,21 @@ export function createDemoServer({ file = '.pocket/state.json', sync = syncNessi
     }),
     // Memory (Moss): facts the user told Lila, plus purchases, searchable by meaning.
     async recall(query, topK = 4) {
-      return (await memoryIndex.search(query, topK)).map(d => ({ id: d.id, kind: d.metadata?.kind, text: d.text }));
+      // Facts from a forwarded text stay out of replies until the user confirms them in the app.
+      const unconfirmed = new Set(data.memories.filter(m => !m.confirmed).map(m => `mem:${m.id}`));
+      return (await memoryIndex.search(query, topK)).filter(d => !unconfirmed.has(d.id)).map(d => ({ id: d.id, kind: d.metadata?.kind, text: d.text }));
     },
-    remember: fact => serial(() => {
+    confirm: id => serial(() => {
+      const key = String(id).replace(/^mem:/, '');
+      if (!data.memories.some(m => m.id === key)) return false;
+      save({ ...data, memories: data.memories.map(m => m.id === key ? { ...m, confirmed: true } : m) });
+      return true;
+    }),
+    remember: (fact, source = 'app') => serial(() => {
       const text = fact.trim();
       const existing = data.memories.find(m => m.text.toLowerCase() === text.toLowerCase());
       if (existing) return existing;
-      const memory = { id: randomBytes(4).toString('hex'), text, createdAt: new Date().toISOString() };
+      const memory = { id: randomBytes(4).toString('hex'), text, createdAt: new Date().toISOString(), source, confirmed: source !== 'text' };
       save({ ...data, memories: [...data.memories, memory].slice(-MAX_MEMORIES) });
       return memory;
     }),
@@ -250,11 +260,16 @@ export function createDemoServer({ file = '.pocket/state.json', sync = syncNessi
         setImmediate(processInbox);
         return;
       }
+      // The printed pairing token only exchanges for a random session cookie, so the link
+      // itself is never a bearer credential for the API. Sessions expire and reset on restart.
       if (url.pathname === `/pair/${token}` && req.method === 'GET') {
-        res.writeHead(303, { 'Set-Cookie': `pocket=${token}; HttpOnly; SameSite=Strict; Max-Age=604800; Path=/${req.headers['x-forwarded-proto'] === 'https' ? '; Secure' : ''}`, Location: '/', 'Referrer-Policy': 'no-referrer' }); res.end(); return;
+        const session = randomBytes(32).toString('hex');
+        sessions.set(session, Date.now() + SESSION_MS);
+        res.writeHead(303, { 'Set-Cookie': `pocket=${session}; HttpOnly; SameSite=Strict; Max-Age=${SESSION_MS / 1000}; Path=/${req.headers['x-forwarded-proto'] === 'https' ? '; Secure' : ''}`, Location: '/', 'Referrer-Policy': 'no-referrer' }); res.end(); return;
       }
       if (url.pathname.startsWith('/api/')) {
-        if (!(req.headers.cookie || '').split(';').some(c => c.trim() === `pocket=${token}`)) return json(401, { error: 'Open the pairing link printed by npm run demo on this device first.' });
+        const session = (req.headers.cookie || '').split(';').map(c => c.trim()).find(c => c.startsWith('pocket='))?.slice('pocket='.length);
+        if (!session || !(sessions.get(session) > Date.now())) { sessions.delete(session); return json(401, { error: 'Open the pairing link printed by npm run demo on this device first.' }); }
         if (req.method === 'GET' && url.pathname === '/api/state') return json(200, view());
         // Voice takes a raw recording, so it comes before the JSON-only check below.
         if (req.method === 'POST' && url.pathname === '/api/voice') { const result = await talk(req, url); return json(200, { ...view(), voice: result }); }
@@ -293,6 +308,10 @@ export function createDemoServer({ file = '.pocket/state.json', sync = syncNessi
         if (url.pathname === '/api/memories') {
           if (typeof input.text !== 'string' || !input.text.trim() || input.text.length > 140) throw new Error('Invalid memory.');
           await ops.remember(input.text);
+          return json(200, view());
+        }
+        if (url.pathname === '/api/memories/confirm') {
+          await ops.confirm(input.id);
           return json(200, view());
         }
         if (url.pathname === '/api/memories/forget') {
@@ -392,7 +411,7 @@ export function createDemoServer({ file = '.pocket/state.json', sync = syncNessi
     return { transcript, reply: answer, audio, audioType: 'audio/mpeg', remembered: data.memories.filter(m => !known.has(m.id)) };
   }
 
-  return { server, token, refresh: () => serial(refresh), resume: processInbox, memoryIndex };
+  return { server, token, refresh: () => serial(refresh), resume: processInbox, memoryIndex, ops };
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {

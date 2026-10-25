@@ -29,7 +29,7 @@ How you work:
 - If the user says no, CANCEL, or changes their mind, call cancel_pending_action.
 - Payments go through the user's Capital One Nessie sandbox account, which records whole dollars, so round prices to whole dollars. It's a sandbox: no real money moves. Don't claim otherwise.
 - You have a memory. Each message may start with [Lila remembers: ...]: facts the user told you before. Use them naturally (e.g. only suggest vegetarian places to a vegetarian) without reciting them.
-- When the user states a lasting preference, goal, or place they like or avoid ("I'm vegetarian", "saving for Tahoe", "I hate Sweetgreen"), save it with remember_about_user. Only save what they said about themselves; never save account numbers, passwords, or health details beyond food preferences. Don't announce it; the app shows a small "Remembered" note.
+- When the user states a lasting preference, goal, or place they like or avoid ("I'm vegetarian", "saving for Tahoe", "I hate Sweetgreen"), save it with remember_about_user. Only save what they said about themselves; never save account numbers, passwords, or health details beyond food preferences. Don't announce it; the user can review and delete saved memories in the Lila app.
 - If they ask you to forget something, use forget_about_user. Use search_memory to look up things they told you or past purchases ("how much on boba?", "that ramen place").`;
 
 const VOICE_RULES = `[The user is speaking to you in the Lila app; your reply will be read aloud.] Answer in one or two short spoken sentences (under about 25 words): no lists, no symbols beyond dollar amounts, no "reply YES" (say "just say yes"). The app shows details on screen.`;
@@ -165,7 +165,8 @@ export function buildTools(ops, ctx) {
       inputSchema: z.object({ fact: z.string().min(2).max(140) }),
       run: async ({ fact }) => {
         if (!ctx.userInitiated) return 'Refused: only save what the user said in their own message.';
-        const memory = await ops.remember(fact);
+        const memory = await ops.remember(fact, ctx.source);
+        if (memory.source === 'text') return `Saved (${memory.id}), but it stays out of replies until the user confirms it in the Lila app.`;
         return `Remembered (${memory.id}): ${memory.text}`;
       },
     }),
@@ -220,7 +221,7 @@ export function isClearApproval(text) {
 export async function runAgent({ ops, text, trigger = 'sms', location, bankFresh = true, client = new Anthropic() }) {
   // Texts can be forwarded from third parties, so only the app and voice may delete memories.
   // Saving is still allowed from texts (it's how Lila learns preferences).
-  const ctx = { turnId: crypto.randomUUID(), userInitiated: trigger !== 'location', canEditMemory: trigger === 'simulation' || trigger === 'voice', bankFresh, city: location?.city, region: location?.region,
+  const ctx = { turnId: crypto.randomUUID(), userInitiated: trigger !== 'location', canEditMemory: trigger === 'simulation' || trigger === 'voice', source: { sms: 'text', voice: 'voice' }[trigger] ?? 'app', bankFresh, city: location?.city, region: location?.region,
     approvedActionId: trigger !== 'location' && isClearApproval(text) ? ops.pending()?.id : null };
   const base = trigger === 'location'
     ? `[Lila app location update, not a message from the user]\n${JSON.stringify(location)}\n\n${LOCATION_RULES}`

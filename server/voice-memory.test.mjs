@@ -7,6 +7,7 @@ import { once } from 'node:events';
 import { createLocalIndex, createMossIndex, transactionDoc } from './memory.mjs';
 import { buildTools } from './agent.mjs';
 import { createDemoServer } from './index.mjs';
+import { pairedCookie } from './test-helpers.mjs';
 
 process.env.POCKET_WEB_SEARCH = 'off';
 const quiet = { log() {}, warn() {}, error() {} };
@@ -88,13 +89,38 @@ test('Moss search drops docs no longer saved and weak matches', async () => {
   assert.deepEqual((await index.search('food')).map(d => d.id), ['mem:a']);
 });
 
+test('a fact from a text is labelled and stays out of replies until confirmed', async t => {
+  const dir = mkdtempSync(join(tmpdir(), 'lila-provenance-'));
+  const app = createDemoServer({ file: join(dir, 'state.json'), env: {}, token: 'pair', sync: async s => s, send: async () => 'id', memoryIndex: createLocalIndex() });
+  app.server.listen(0, '127.0.0.1'); await once(app.server, 'listening');
+  t.after(async () => { await new Promise(r => app.server.close(r)); rmSync(dir, { recursive: true, force: true }); });
+  const base = `http://127.0.0.1:${app.server.address().port}`;
+  const cookie = await pairedCookie(base, 'pair');
+  const post = (path, body) => fetch(base + path, { method: 'POST', headers: { Cookie: cookie, 'Content-Type': 'application/json' }, body: JSON.stringify(body) }).then(r => r.json());
+  await app.ops.remember('Vegetarian', 'text');
+  await app.ops.remember('Saving for Tahoe', 'app');
+  assert.equal((await app.ops.recall('vegetarian')).length, 0);
+  assert.equal((await app.ops.recall('tahoe')).length, 1);
+  const state = await (await fetch(base + '/api/state', { headers: { Cookie: cookie } })).json();
+  assert.deepEqual(state.memories.map(m => [m.text, m.source, m.confirmed]), [['Vegetarian', 'text', false], ['Saving for Tahoe', 'app', true]]);
+  await post('/api/memories/confirm', { id: state.memories[0].id });
+  assert.equal((await app.ops.recall('vegetarian')).length, 1);
+});
+
+test('the agent tells the model that a text-sourced fact is pending confirmation', async () => {
+  const ops = { remember: async (fact, source) => ({ id: 'm1', text: fact, source }), forget: async () => true, recall: async () => [] };
+  const result = await buildTools(ops, { userInitiated: true, canEditMemory: false, source: 'text' }).find(t => t.name === 'remember_about_user').run({ fact: 'Likes tacos' });
+  assert.match(result, /until the user confirms/);
+});
+
 async function server(t, { agent, voice } = {}) {
   const dir = mkdtempSync(join(tmpdir(), 'lila-voice-'));
   const app = createDemoServer({ file: join(dir, 'state.json'), env: {}, token: 'pair', sync: async s => s, send: async () => 'id', agent, voice, memoryIndex: createLocalIndex() });
   app.server.listen(0, '127.0.0.1'); await once(app.server, 'listening');
   t.after(async () => { await new Promise(r => app.server.close(r)); rmSync(dir, { recursive: true, force: true }); });
   const base = `http://127.0.0.1:${app.server.address().port}`;
-  const api = (path, body, type = 'application/json') => fetch(base + path, { method: body === undefined ? 'GET' : 'POST', headers: { Cookie: 'pocket=pair', 'Content-Type': type }, body: type === 'application/json' && body !== undefined ? JSON.stringify(body) : body });
+  const cookie = await pairedCookie(base, 'pair');
+  const api = (path, body, type = 'application/json') => fetch(base + path, { method: body === undefined ? 'GET' : 'POST', headers: { Cookie: cookie, 'Content-Type': type }, body: type === 'application/json' && body !== undefined ? JSON.stringify(body) : body });
   return { api };
 }
 
