@@ -11,9 +11,22 @@ import { runAgent } from './agent.mjs';
 import { splitSms } from './sms-text.mjs';
 import { lookupPlace } from './place.mjs';
 import { geocodePlace, locatePlaces } from './geocode.mjs';
+
+// A saved place is identified by name and area, so asking again updates it instead of duplicating it.
+const placeKey = place => `${place.name}|${place.area ?? ''}`.toLowerCase();
+// Saved places stay until removed; a new search adds to them.
+// `search` labels the results with what was asked for, e.g. "Dinner near Mission".
+const attempt = async run => { try { return await run(); } catch { return null; } };
+const addRecommendations = (state, found, at, search, category) => {
+  const incoming = found.map(place => ({ ...place, id: placeKey(place), savedAt: at, search: search || null, category: category || null, photoChecked: true, coordsChecked: true }));
+  const keep = (state.recommendations || []).filter(place => !incoming.some(n => n.id === placeKey(place)));
+  return { ...state, recommendations: [...incoming, ...keep], recommendationsAt: at };
+};
+const removeRecommendation = (state, id) => ({ ...state, recommendations: (state.recommendations || []).filter(place => placeKey(place) !== id) });
 import { updateProfile, editExpense, DEFAULT_PROFILE } from '../src/lib/preferences.js';
 import { createVoice } from './voice.mjs';
 import { createMemoryIndex, memoryDoc, transactionDoc } from './memory.mjs';
+import { PHOTO_NAME, fetchPlacePhoto, findPlaceMatch } from './photos.mjs';
 
 const PENDING_TTL_MS = 30 * 60 * 1000;
 const NUDGE_COOLDOWN_MS = 20 * 60 * 1000;
@@ -46,7 +59,7 @@ export function createDemoServer({ file = '.pocket/state.json', sync = syncNessi
   const serial = fn => { const result = queue.then(fn); queue = result.catch(() => {}); return result; };
   // Every save keeps the search index in step with the saved memories and purchases.
   function save(next) { writeFileSync(file + '.tmp', JSON.stringify(next)); renameSync(file + '.tmp', file); data = next; memoryIndex.sync(indexDocs(next)); }
-  function view() { return { ...data.state, connectionWarning: syncWarning, conversation: data.messages, pendingReply: agent ? (livePending() ? 'YES' : null) : data.proposals.simulation ? `YES ${data.proposals.simulation.code}` : null, agentEnabled: Boolean(agent), voiceEnabled: voice.enabled, memories: data.memories, smsStatus: data.outbox.slice(-5).map(o => ({ status: o.status, error: o.error })), phone: env.BANDWIDTH_PHONE_NUMBER || '', invitation: INVITATION }; }
+  function view() { return { ...data.state, recommendations: (data.state.recommendations || []).map(place => ({ ...place, id: placeKey(place) })), connectionWarning: syncWarning, conversation: data.messages, pendingReply: agent ? (livePending() ? 'YES' : null) : data.proposals.simulation ? `YES ${data.proposals.simulation.code}` : null, agentEnabled: Boolean(agent), voiceEnabled: voice.enabled, memories: data.memories, smsStatus: data.outbox.slice(-5).map(o => ({ status: o.status, error: o.error })), phone: env.BANDWIDTH_PHONE_NUMBER || '', invitation: INVITATION }; }
   async function refresh() {
     try {
       const state = await sync(data.state);
@@ -90,9 +103,15 @@ export function createDemoServer({ file = '.pocket/state.json', sync = syncNessi
         : updateProfile(data.state, undo.input);
       save({ ...data, state, agent: { ...data.agent, lastChange: null } });
     }),
-    recommendations: async items => {
-      const places = await locatePlaces(items, geocode);
-      return serial(() => { save({ ...data, state: { ...data.state, recommendations: places, recommendationsAt: new Date().toISOString() } }); });
+    recommendations: async (items, search, category) => {
+      const located = await locatePlaces(items, geocode);
+      // Google supplies the photo and, when Nominatim couldn't place it, the location. Failures keep the place as is.
+      const places = [];
+      for (const place of located) {
+        const match = await attempt(() => findPlaceMatch(place)) ?? {};
+        places.push({ ...place, ...(match.photo ? { photo: match.photo } : {}), ...(place.lat == null && match.lat != null ? { lat: match.lat, lng: match.lng } : {}) });
+      }
+      return serial(() => { save({ ...data, state: addRecommendations(data.state, places, new Date().toISOString(), search, category) }); });
     },
     pending: livePending,
     history: () => data.agent.history,
@@ -186,6 +205,25 @@ export function createDemoServer({ file = '.pocket/state.json', sync = syncNessi
 
   // `at` lets the app's chat show just the current conversation.
   const log = (...messages) => serial(() => { const at = new Date().toISOString(); save({ ...data, messages: [...data.messages, ...messages.map(m => ({ ...m, at }))].slice(-100) }); });
+  // Saved places from before photos and map pins existed get them once. Failed lookups are remembered so they aren't retried on every start.
+  async function fillPhotos() {
+    const pending = (data.state.recommendations || []).filter(place => (!place.photo && !place.photoChecked) || (place.lat == null && !place.coordsChecked));
+    for (const place of pending) {
+      const update = {};
+      const match = await attempt(() => findPlaceMatch(place)) ?? {};
+      if (!place.photo && !place.photoChecked) { update.photo = match.photo ?? null; update.photoChecked = true; }
+      if (place.lat == null && !place.coordsChecked) {
+        const coords = match.lat != null ? { lat: match.lat, lng: match.lng } : await attempt(() => geocode(place));
+        Object.assign(update, coords ?? {});
+        update.coordsChecked = true;
+      }
+      await serial(() => {
+        const recommendations = (data.state.recommendations || []).map(p => placeKey(p) === placeKey(place) ? { ...p, ...update } : p);
+        save({ ...data, state: { ...data.state, recommendations } });
+      });
+    }
+  }
+  setImmediate(fillPhotos);
   const queueTexts = (id, text) => serial(() => save({ ...data, outbox: [...data.outbox, ...splitSms(text).map((part, i) => ({ id: i ? `${id}-${i + 1}` : id, text: part, status: 'queued' }))] }));
 
   // One reply to a user message, from Claude or (without a key) the scripted responder.
@@ -272,6 +310,15 @@ export function createDemoServer({ file = '.pocket/state.json', sync = syncNessi
         const session = (req.headers.cookie || '').split(';').map(c => c.trim()).find(c => c.startsWith('pocket='))?.slice('pocket='.length);
         if (!session || !(sessions.get(session) > Date.now())) { sessions.delete(session); return json(401, { error: 'Open the pairing link printed by npm run demo on this device first.' }); }
         if (req.method === 'GET' && url.pathname === '/api/state') return json(200, view());
+        if (req.method === 'GET' && url.pathname === '/api/place-photo') {
+          const name = url.searchParams.get('name') || '';
+          if (!PHOTO_NAME.test(name)) return json(400, { error: 'Unknown photo.' });
+          const photo = await fetchPlacePhoto(name).catch(() => null);
+          if (!photo) { res.writeHead(404); res.end(); return; }
+          res.writeHead(200, { 'Content-Type': photo.type, 'Cache-Control': 'private, max-age=86400' });
+          res.end(photo.bytes);
+          return;
+        }
         // Voice takes a raw recording, so it comes before the JSON-only check below.
         if (req.method === 'POST' && url.pathname === '/api/voice') { const result = await talk(req, url); return json(200, { ...view(), voice: result }); }
         if (req.method !== 'POST' || req.headers['content-type'] !== 'application/json') return json(400, { error: 'Expected a JSON POST.' });
@@ -329,7 +376,8 @@ export function createDemoServer({ file = '.pocket/state.json', sync = syncNessi
             // Keep who the user is (onboarding/preferences); budgets and spending return to the seed.
             save({ ...data, state: { ...state, profile: data.state.profile, revision: data.state.revision + 1 }, proposals: {}, messages: [], agent: { pending: null, history: [] }, memories: [] });
             lastNudge.clear();
-          } else if (url.pathname === '/api/expense') save({ ...data, state: addExpense(data.state, { ...input, source: 'manual' }) });
+          } else if (url.pathname === '/api/recommendations/remove') save({ ...data, state: removeRecommendation(data.state, input.id) });
+          else if (url.pathname === '/api/expense') save({ ...data, state: addExpense(data.state, { ...input, source: 'manual' }) });
           else if (url.pathname === '/api/expense/edit') save({ ...data, state: editExpense(data.state, input) });
           else if (url.pathname === '/api/profile') save({ ...data, state: updateProfile(data.state, input) });
           else if (url.pathname === '/api/proposal') {

@@ -12,7 +12,7 @@ const MIN_MOVE_METERS = 75;
 let watchId = null;
 let last = null;
 
-function meters(a, b) {
+export function meters(a, b) {
   const rad = x => x * Math.PI / 180;
   const dLat = rad(b.lat - a.lat), dLng = rad(b.lng - a.lng);
   const h = Math.sin(dLat / 2) ** 2 + Math.cos(rad(a.lat)) * Math.cos(rad(b.lat)) * Math.sin(dLng / 2) ** 2;

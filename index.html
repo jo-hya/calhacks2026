@@ -2,17 +2,30 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <link rel="icon" type="image/svg+xml" href="/pocket.svg" />
+    <link rel="icon" type="image/svg+xml" href="/lila.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <meta name="theme-color" content="#3d1d46" />
     <link rel="manifest" href="/manifest.webmanifest" />
-    <link rel="apple-touch-icon" href="/icons/pocket-180.png" />
+    <link rel="apple-touch-icon" href="/icons/lila-180.png" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-title" content="Lila" />
     <meta name="description" content="Lila helps you make room for the things that matter. A simple, thoughtful place for your everyday budget." />
     <title>Lila — Make room for living</title>
+    <style>
+      /* Launch screen until the app mounts; App removes #splash once it has rendered. */
+      #splash{position:fixed;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:18px;background:#3d1d46;color:#fff;z-index:9999}
+      #splash .splash-flower{position:relative;width:96px;height:96px;animation:splash-spin 10s linear infinite}
+      #splash .splash-flower img{position:absolute;inset:0;width:100%;height:100%}
+      #splash .splash-word{font:400 40px/1 'GFS Didot',Didot,'Times New Roman',serif}
+      /* Same rotation curve as the chat and voice flower in lila-final.css. */
+      @keyframes splash-spin{0%{transform:rotate(0deg);animation-timing-function:ease-in}5.12%{transform:rotate(90deg);animation-timing-function:linear}17.63%{transform:rotate(450deg);animation-timing-function:ease-out}31.85%,100%{transform:rotate(720deg)}}
+    </style>
   </head>
   <body>
+    <div id="splash" role="status" aria-label="Loading Lila">
+      <div class="splash-flower"><img src="/figma/final/dashboard-logo-0eabe.svg" alt="" /></div>
+      <div class="splash-word">lila</div>
+    </div>
     <div id="root"></div>
     <script type="module" src="/src/main.jsx"></script>
   </body>
