@@ -3,26 +3,23 @@
 Lila can be talked to in the app (Cartesia) and remembers what users tell it (Moss).
 All routes need the app's pairing cookie, like the rest of `/api/*`.
 
-## Connecting a screen (chat + voice)
+## Chat and voice in the app
 
-Everything on a chat/voice screen goes to the same Claude agent as texts: same budget, Nessie
-purchases, memory and YES-approval rules. `src/lib/store.js` has helpers for the app:
+Both screens (`src/Talk.jsx`) go to the same Claude agent as texts: same budget, Nessie
+purchases, memory and YES-approval rules.
 
-| On the screen | Call | Returns |
-|---|---|---|
-| Typed message or a starter chip | `store.ask(text, speak)` | `{ transcript, reply, audio, audioType, remembered }` |
-| A recording (`MediaRecorder` blob) | `store.voice(blob, speak)` | same |
-| "Undo" on a Remembered note | `store.forget(id)` | updated app state |
-
-`speak` is the speaker (🔊) button: `false` returns text only and skips generating speech.
-Play `audio` with `new Audio('data:' + audioType + ';base64,' + audio).play()`. Replies are
-one or two short sentences, written to be spoken. Both helpers also refresh the app state
-(budgets, `memories`).
-
+- **Chat** (the star in the bottom bar): typed messages and the two starter prompts go through
+  `store.message(text)`. The thread shows only the current conversation; it starts fresh each
+  time the star is tapped (messages carry an `at` time for this).
+- **Voice** (the mic in the chat box) is hands-free (`src/lib/voiceSession.js`): it listens,
+  ends your turn after a short pause, sends the recording with `store.voice(blob)` (Cartesia
+  transcribes, Lila answers, Cartesia speaks), plays the answer, then listens again. The mic is
+  ignored while Lila is talking, so she never hears herself. The left button mutes the mic, the
+  centre wave pauses or resumes, and X ends the conversation. Sounds with no words (a cough, a
+  door) are skipped quietly.
 - The mic needs HTTPS on phones (open the app through the ngrok address) or `127.0.0.1` on the
   laptop. Safari records `audio/mp4`, Chrome and Android `audio/webm`; both work.
 - The Android app has microphone permission (rebuild after pulling).
-- Pause recording while Lila's answer plays, or the mic may pick her up.
 
 ## Setup
 
@@ -62,7 +59,8 @@ Response: the usual app state plus
 
 Play it with `new Audio('data:audio/mpeg;base64,' + voice.audio).play()`. `remembered`
 lists facts saved during this turn, for a "Remembered: Vegetarian · Undo" note.
-`audio` is `null` if speech failed; show `reply` as text.
+`audio` is `null` if speech failed; show `reply` as text. When the recording has no words
+(`transcript` is empty), no speech is generated.
 
 `?speak=0` skips speech (Lila's voice turned off): the reply comes back as text only.
 
@@ -76,6 +74,9 @@ lists facts saved during this turn, for a "Remembered: Vegetarian · Undo" note.
 - The agent saves lasting facts users state about themselves (`remember_about_user`), only from
   the user's own messages, never from location updates. It doesn't save account numbers,
   passwords or health details beyond food preferences.
+- Facts saved from a text (which may be forwarded from someone else) stay out of replies until
+  the user confirms them under Settings → What Lila remembers. Only the app and voice can delete
+  memories.
 - Before every reply, the most relevant memories and purchases are looked up and given to
   Claude, so answers are personal without an extra step. With Moss, the index is loaded in
   memory, so this takes milliseconds.

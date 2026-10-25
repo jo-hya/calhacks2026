@@ -3,8 +3,8 @@ import { CATEGORIES, DEMO_DATE, money, parseMoney, getBudgets, getTotals } from 
 import { store, connected } from './lib/store.js';
 import TextDemo from './TextDemo.jsx';
 import InstallPocket from './InstallPocket.jsx';
-import { Home, Nearby, Setup, LocationControl, SmsLink, DemoArrival, Flower } from './Experience.jsx';
-import VoiceScreen from './Voice.jsx';
+import { Home, Nearby, Setup, LocationControl, SmsLink, DemoArrival, Glow, LilaBrand, PlusButton, CategoryArt, inDisplayOrder, art } from './Experience.jsx';
+import { ChatScreen, VoiceScreen } from './Talk.jsx';
 import { DEFAULT_PROFILE } from './lib/preferences.js';
 
 const asset = name => `/figma/${name}`;
@@ -46,8 +46,12 @@ function CategoryIcon({ category, small = false }) {
   const files = { dining: 'dining.png', shopping: 'clothing.png', transport: 'transport.png' };
   return <span className={`category-icon ${small ? 'small' : ''}`}><Asset name={small ? 'feed-circle.svg' : 'category-circle.svg'} className="circle-art" />{files[category.id] ? <Asset name={files[category.id]} className={`category-art ${category.id}`} /> : <Icon name={category.icon} size={16} />}</span>;
 }
-const NAV = [{ id: 'overview', label: 'Home', asset: 'home.svg' }, { id: 'nearby', label: 'Nearby', asset: 'final/1-imgLiSearch-4c9cf.svg' }, { id: 'budgets', label: 'Budgets', asset: 'pie.svg' }, { id: 'profile', label: 'Spending and profile', asset: 'user.svg' }];
-function initialPage() { const hash = window.location.hash.slice(1); return [...NAV.map(n => n.id), 'transactions', 'texts', 'activity', 'settings', 'voice'].includes(hash) ? hash : 'overview'; }
+const NAV = [{ id: 'overview', label: 'Home', icon: 'nav-home-5f26e.svg' }, { id: 'nearby', label: 'Nearby', icon: 'nav-search-4c9cf.svg' }, { id: 'budgets', label: 'Budgets', icon: 'nav-pie-94c07.svg' }, { id: 'profile', label: 'Spending and profile', icon: 'nav-user-0c22b.svg' }];
+function initialPage() { const hash = window.location.hash.slice(1); return [...NAV.map(n => n.id), 'transactions', 'texts', 'activity', 'settings', 'chat', 'voice'].includes(hash) ? hash : 'overview'; }
+// Time of the newest logged message; a chat started now shows only messages after it.
+// Sorts after every timestamp, so nothing shows until the conversation has loaded.
+const NOT_LOADED = '￿';
+const lastMessageAt = state => (state.conversation || []).reduce((latest, m) => m.at && m.at > latest ? m.at : latest, '');
 
 export default function App() {
   const state = useSyncExternalStore(store.subscribe, store.getSnapshot);
@@ -56,6 +60,9 @@ export default function App() {
   const [toast, setToast] = useState('');
   const [filter, setFilter] = useState('all');
   const [search, setSearch] = useState('');
+  // Set once the server's conversation has loaded, so a reload starts a fresh chat.
+  const [chatSince, setChatSince] = useState(null);
+  useEffect(() => { if (chatSince === null && (!connected || state.conversation)) setChatSince(lastMessageAt(state)); }, [state.conversation, chatSince]);
   const budgets = getBudgets(state);
   const totals = getTotals(state);
   const profile = { ...DEFAULT_PROFILE, ...state.profile };
@@ -67,7 +74,9 @@ export default function App() {
   function navigate(id, category = 'all') { setPage(id); setFilter(category); setSearch(''); window.location.hash = id; mainRef.current?.focus({ preventScroll: true }); window.scrollTo({ top: 0, behavior: 'instant' }); }
   function complete(message) { setModal(null); setToast(message); }
   const warning = store.getWarning();
-  const navItem = item => <a key={item.id} href={`#${item.id}`} aria-label={item.label} title={item.label} aria-current={page === item.id ? 'page' : undefined} className={`nav-item ${page === item.id ? 'active' : ''}`} onClick={e => { e.preventDefault(); navigate(item.id); }}><Asset name={item.asset} /></a>;
+  const navItem = item => <a key={item.id} href={`#${item.id}`} aria-label={item.label} title={item.label} aria-current={page === item.id ? 'page' : undefined} className="lf-nav-item" onClick={e => { e.preventDefault(); navigate(item.id); }}><span><img src={art(item.icon)} alt="" /></span></a>;
+  function startChat() { setChatSince(lastMessageAt(state)); navigate('chat'); }
+  const ordered = inDisplayOrder(budgets);
   return <div className={`app-shell page-${page}`}>
     <a className="skip-link" href="#main-content">Skip to content</a>
     <div className="ambient" aria-hidden="true"><Asset name="glow.svg" className="glow glow-top" /><Asset name="glow.svg" className="glow glow-bottom" /></div>
@@ -76,19 +85,43 @@ export default function App() {
 
 
       {page === 'texts' && <><PageHeading title="Lila texts" subtitle="Make room for plans with friends." /><TextDemo state={state} /></>}
+      {page === 'chat' && <ChatScreen state={state} navigate={navigate} since={chatSince ?? NOT_LOADED} />}
       {page === 'voice' && <VoiceScreen state={state} navigate={navigate} />}
       {page === 'overview' && <Home state={state} navigate={navigate} onAdd={() => setModal({ type: 'expense' })} />}
-      {page === 'nearby' && <Nearby state={state} />}
-      {page === 'profile' && <>
-        <header className="feed-header"><div className="welcome"><button className="avatar" aria-label="Preferences and settings" onClick={() => navigate('settings')}><span>{profile.name.slice(0,1)}</span></button><strong>{profile.name}</strong></div><div className="monthly-spending"><h1>Monthly Spending</h1><div><strong>{money(totals.spent)}</strong><span>/ {money(totals.limit)}</span></div></div></header>
-        <section className="feed-surface" aria-label="Recent spending"><SpendingFeed transactions={state.transactions} onEdit={() => navigate('transactions')} /></section>
-      </>}
-      {page === 'budgets' && <div className="budget-screen"><h1 className="sr-only">Your budgets</h1><div className="brand-row budget-brand"><span className="lila-brand"><Flower small /><span>lila</span></span><button className="icon-button" aria-label="Talk to Lila" onClick={() => navigate('voice')}><Icon name="mic" size={22} /></button></div><section className="balance-card" aria-label="Monthly budget summary"><span className="month-label"><Asset name="month-chevron.svg" />OCT 2026</span><div className="balance-amount">{money(totals.remaining)}<span>left this month</span></div><div className="total-progress" role="progressbar" aria-label="Monthly budget spent" aria-valuenow={Math.round(totals.spent / totals.limit * 100)} aria-valuemin={0} aria-valuemax={Math.max(100, Math.round(totals.spent / totals.limit * 100))}>{budgets.map(b => <span key={b.id} style={{ width: `${b.spent / Math.max(totals.limit, totals.spent) * 100}%`, background: b.color }} />)}</div><div className="balance-stats"><div><span>Total budget</span><strong>{money(totals.limit)}</strong></div><div><span>Spent so far</span><strong>{money(totals.spent)}</strong></div><div><span>Budget remaining</span><strong>{Math.round(totals.remaining / totals.limit * 100)}%</strong></div></div></section><section className="budget-list" aria-label="Budget categories">{budgets.map(b => <button className="budget-card" key={b.id} onClick={() => setModal({ type: 'category', category: b.id })} aria-label={`View ${b.name} budget, ${money(b.remaining)} remaining`}><div className="budget-card-top"><CategoryIcon category={b} /><h2>{b.name}</h2><Asset name="category-chevron.svg" className="category-chevron" /></div><div className="budget-remaining"><strong>{money(Math.abs(b.remaining))}</strong> {b.remaining < 0 ? 'over budget' : 'left'}</div><div className="category-progress"><span style={{ width: `${Math.min(100, b.limit ? b.spent / b.limit * 100 : 100)}%`, background: b.color }} /></div><div className="budget-card-footer"><span>{money(b.spent)} spent</span><span>of {money(b.limit)}</span></div></button>)}</section><button className="button light full-width" onClick={() => setModal({ type: 'transfer' })}><Icon name="transfer" />Move budget</button></div>}
+      {page === 'nearby' && <Nearby state={state} onAdd={() => setModal({ type: 'expense' })} />}
+      {page === 'profile' && <div className="lf-screen lf-profile">
+        <Glow x={196} y={92} />
+        <header className="lf-profile-head">
+          <div className="lf-profile-row"><button className="lf-avatar" aria-label="Preferences and settings" onClick={() => navigate('settings')}><img src={art('2-imgEllipse1-46e64.svg')} alt="" /><span>{profile.name.slice(0,1)}</span></button><strong>{profile.name}</strong></div>
+          <p className="lf-month-label">Monthly Spending</p>
+          <p className="lf-month-amount"><strong>{money(totals.spent)}</strong><span>/ {money(totals.limit)}</span></p>
+        </header>
+        <PlusButton tone="light" label="Add a purchase" onClick={() => setModal({ type: 'expense' })} />
+        <section className="lf-feed" aria-label="Recent spending"><SpendingFeed transactions={state.transactions} onEdit={() => navigate('transactions')} /></section>
+      </div>}
+      {page === 'budgets' && <div className="lf-screen lf-dash">
+        <Glow x={159} y={3} /><Glow x={-16} y={744} />
+        <h1 className="sr-only">Your budgets</h1>
+        <LilaBrand tone="light" />
+        <PlusButton tone="light" label="Add a purchase or move budget" onClick={() => setModal({ type: 'actions' })} />
+        <section className="lf-summary" aria-label="Monthly budget summary">
+          <span className="lf-month"><img src={art('3-imgGroup5-c3a6b.svg')} alt="" />OCT 2026</span>
+          <p className="lf-left"><strong>{money(totals.remaining)}</strong><span>left this month</span></p>
+          <div className="lf-total-bar" role="progressbar" aria-label="Monthly budget spent" aria-valuenow={Math.round(totals.spent / totals.limit * 100)} aria-valuemin={0} aria-valuemax={Math.max(100, Math.round(totals.spent / totals.limit * 100))}>{ordered.map(b => <span key={b.id} style={{ width: `${b.spent / Math.max(totals.limit, totals.spent) * 100}%`, background: b.color }} />)}</div>
+          <div className="lf-stats"><div><span>Total budget</span><strong>{money(totals.limit)}</strong></div><div><span>Spent so far</span><strong>{money(totals.spent)}</strong></div><div><span>Budget remaining</span><strong>{Math.round(totals.remaining / totals.limit * 100)}%</strong></div></div>
+        </section>
+        <section className="lf-cats" aria-label="Budget categories">{ordered.map(b => <button className="lf-cat" key={b.id} onClick={() => setModal({ type: 'category', category: b.id })} aria-label={`View ${b.name} budget, ${money(b.remaining)} remaining`}>
+          <span className="lf-cat-head"><CategoryArt id={b.id} /><span className="lf-cat-name">{b.name}</span><img className="lf-cat-chevron" src={art('3-imgGroup6-a8926.svg')} alt="" /></span>
+          <span className="lf-cat-left"><strong>{money(Math.abs(b.remaining))}</strong> {b.remaining < 0 ? 'over' : 'left'}</span>
+          <span className="lf-cat-bar"><span style={{ width: `${Math.min(100, b.limit ? b.spent / b.limit * 100 : 100)}%`, background: b.color }} /></span>
+          <span className="lf-cat-foot"><span>{money(b.spent)} spent</span><span>of {money(b.limit)}</span></span>
+        </button>)}</section>
+      </div>}
       {page === 'transactions' && <><PageHeading title="Your spending" subtitle="The little things, all in one place." /><section className="content-surface"><div className="transaction-toolbar"><label className="search-input"><span className="sr-only">Search transactions</span><input placeholder="Search a merchant…" value={search} onChange={e => setSearch(e.target.value)} /></label><label><span className="sr-only">Filter by category</span><select value={filter} onChange={e => setFilter(e.target.value)}><option value="all">All categories</option>{CATEGORIES.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}</select></label></div><TransactionList onEdit={transaction => setModal({ type: 'expense', transaction })} transactions={state.transactions.filter(t => (filter === 'all' || t.category === filter) && t.merchant.toLowerCase().includes(search.toLowerCase())).sort((a,b) => b.date.localeCompare(a.date))} /><button className="button primary full-width" onClick={() => setModal({ type: 'expense' })}><Icon name="plus" />Add expense</button></section></>}
       {page === 'activity' && <><PageHeading title="Your activity" subtitle="A little flexibility goes a long way." /><section className="content-surface"><h2>Budget adjustments</h2>{state.adjustments.length ? <ActivityList adjustments={state.adjustments} /> : <div className="empty-state"><Icon name="transfer" size={32} /><h3>A fresh start.</h3><p>Your confirmed budget moves will appear here.</p></div>}<button className="button primary full-width" onClick={() => setModal({ type: 'transfer' })}>Move budget<Icon name="transfer" /></button></section></>}
       {page === 'settings' && <><PageHeading title="Your pocket" subtitle="Make room for what matters." /><section className="content-surface profile-panel"><span className="profile-avatar">{profile.name.slice(0,1)}</span><h2>{profile.name}</h2><p>{profile.area} · Personal demo account</p><button className="settings-row" onClick={() => setModal({ type: 'setup' })}>Preferences &amp; monthly budget<Icon name="chevron" /></button><MemoryList memories={state.memories} onError={setToast} /><LocationControl state={state} /><DemoArrival state={state} /><SmsLink state={state} /><button className="settings-row" onClick={() => navigate('activity')}>Budget activity<Icon name="chevron" /></button><InstallPocket /><button className="settings-row" onClick={() => navigate('transactions')}>All transactions<Icon name="chevron" /></button><button className="settings-row" onClick={() => setModal({ type: 'dinner' })}>Make room for dinner<Icon name="chevron" /></button><button className="settings-row" onClick={() => setModal({ type: 'reset' })}>Reset demo<Icon name="reset" /></button><p className="modal-footnote">October 2026 · USD<br />{connected ? 'Shared demo backed by Nessie sandbox purchases.' : 'Demo data saved on this device.'}</p></section></>}
     </main>
-    <nav className="bottom-nav" aria-label="Main navigation">{NAV.slice(0,2).map(navItem)}<button className="add-button" aria-label="Talk or chat with Lila" onClick={() => navigate('voice')}><Icon name="spark" size={24} /></button>{NAV.slice(2).map(navItem)}</nav>
+    {page !== 'chat' && page !== 'voice' && <nav className="lf-nav" aria-label="Main navigation">{NAV.slice(0,2).map(navItem)}<span className="lf-nav-item"><button className="lf-nav-star" aria-label="Chat with Lila" onClick={startChat}><img src={art('nav-star-cb396.svg')} alt="" /><img className="lf-small-star" src={art('nav-small-star.svg')} alt="" /></button></span>{NAV.slice(2).map(navItem)}</nav>}
     <div className="toast-region" role="status" aria-live="polite">{toast && <div className="toast"><Icon name="check" />{toast}<button aria-label="Dismiss notification" onClick={() => setToast('')}><Icon name="close" /></button></div>}</div>
     {modal && <Modal title={modal.type === 'setup' ? 'Welcome to Lila.' : modal.type === 'transfer' ? 'Make a little room.' : modal.type === 'expense' ? (modal.transaction ? 'A little correction.' : 'Add an expense.') : modal.type === 'reset' ? 'A fresh start?' : modal.type === 'actions' ? 'A little more possibility.' : modal.type === 'dinner' ? 'Dinner with your people?' : `${CATEGORIES.find(c => c.id === modal.category).name} pocket`} onClose={() => setModal(null)}>
       {modal.type === 'setup' && <Setup state={state} onComplete={() => complete('Your pocket is ready.')} />}
@@ -106,9 +139,25 @@ function FeedIcon({ transaction }) {
   let name = transaction.category === 'shopping' || transaction.category === 'groceries' ? 'feed-shopping.png' : transaction.category === 'social' ? 'feed-ticket.png' : transaction.category === 'transport' ? (/Lyft/i.test(transaction.merchant) ? 'feed-car.png' : 'feed-ticket.png') : /coffee/i.test(transaction.merchant) ? 'feed-coffee.png' : 'feed-dining.png';
   return <span className="feed-icon"><Asset name="feed-circle.svg" /><Asset name={name} className={`feed-art ${name.replace('.png','')}`} /></span>;
 }
+// Profile feed artwork from the design: [file, size, left, top] inside the 34px circle.
+const FEED_ART = { dining: ['2-imgChickenLeg1-292f4.png', 22, 6, 7], coffee: ['2-imgCoffeeCup1-5f71b.png', 18, 9, 7], shopping: ['2-imgOnlineShopping1-42e87.png', 18, 8, 7], ride: ['2-imgCar11-6d189.png', 21, 6, 7], ticket: ['2-imgTicket1-9598c.png', 20, 7, 7] };
+function FeedArt({ transaction: t }) {
+  const kind = /coffee|caf[eé]|espresso/i.test(t.merchant) ? 'coffee' : t.category === 'dining' ? 'dining' : t.category === 'shopping' || t.category === 'groceries' ? 'shopping' : t.category === 'transport' && /lyft|uber|taxi/i.test(t.merchant) ? 'ride' : 'ticket';
+  const [file, size, left, top] = FEED_ART[kind];
+  return <span className="lf-feed-icon" aria-hidden="true"><img src={art('2-imgEllipse4-61309.svg')} alt="" /><img src={art(file)} alt="" style={{ width: size, height: size, left, top }} /></span>;
+}
+const dayLabel = date => date === DEMO_DATE ? 'Today' : date === '2026-10-23' ? 'Yesterday' : date === '2026-10-22' ? '2 Days Ago' : new Date(`${date}T12:00:00`).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
 function SpendingFeed({ transactions, onEdit }) {
-  const grouped = Object.groupBy([...transactions].sort((a,b) => b.date.localeCompare(a.date)), t => t.date);
-  return Object.entries(grouped).map(([date, items], i) => <section className="feed-day" key={date}><div className="feed-day-heading"><h2>{date === DEMO_DATE ? 'Today' : date === '2026-10-23' ? 'Yesterday' : date === '2026-10-22' ? '2 Days Ago' : new Date(`${date}T12:00:00`).toLocaleDateString('en-US', { month:'short', day:'numeric' })}</h2>{i === 0 && <button onClick={onEdit}>Edit</button>}</div>{items.map(t => <div className="feed-row" key={t.id}><FeedIcon transaction={t} /><p>Spent <strong>{money(t.amountCents)}</strong> at <strong>{t.merchant}</strong>.</p><span>{CATEGORIES.find(c => c.id === t.category).name}</span></div>)}</section>);
+  const grouped = Object.groupBy([...transactions].sort((a, b) => b.date.localeCompare(a.date)), t => t.date);
+  return Object.entries(grouped).map(([date, items], i) => <section className="lf-feed-day" key={date}>
+    <div className="lf-feed-head"><h2>{dayLabel(date)}</h2>{i === 0 && <button onClick={onEdit}>Edit</button>}</div>
+    {items.map((t, j) => <div className="lf-feed-row" key={t.id}>
+      <FeedArt transaction={t} />
+      <p>Spent <strong>{money(t.amountCents)}</strong> at <strong>{t.merchant}</strong>.</p>
+      <span>{CATEGORIES.find(c => c.id === t.category).name}</span>
+      {j < items.length - 1 && <img className="lf-feed-line" src={art('2-imgLine1-95ed4.svg')} alt="" />}
+    </div>)}
+  </section>);
 }
 function TransactionList({ transactions, onEdit }) {
   if (!transactions.length) return <div className="empty-state"><Icon name="search" size={28} /><h3>No matching transactions.</h3><p>Try another merchant or category.</p></div>;

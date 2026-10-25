@@ -184,7 +184,8 @@ export function createDemoServer({ file = '.pocket/state.json', sync = syncNessi
     },
   };
 
-  const log = (...messages) => serial(() => save({ ...data, messages: [...data.messages, ...messages].slice(-100) }));
+  // `at` lets the app's chat show just the current conversation.
+  const log = (...messages) => serial(() => { const at = new Date().toISOString(); save({ ...data, messages: [...data.messages, ...messages.map(m => ({ ...m, at }))].slice(-100) }); });
   const queueTexts = (id, text) => serial(() => save({ ...data, outbox: [...data.outbox, ...splitSms(text).map((part, i) => ({ id: i ? `${id}-${i + 1}` : id, text: part, status: 'queued' }))] }));
 
   // One reply to a user message, from Claude or (without a key) the scripted responder.
@@ -405,7 +406,8 @@ export function createDemoServer({ file = '.pocket/state.json', sync = syncNessi
     const known = new Set(data.memories.map(m => m.id));
     const answer = transcript ? await reply(transcript, 'voice') : "Sorry, I didn't catch that. Try again?";
     let audio = null;
-    if (speak && voice.enabled) {
+    // Hands-free voice sends pauses and background noise too; stay quiet when no words were heard.
+    if (speak && voice.enabled && transcript) {
       try { audio = (await voice.speak(answer)).toString('base64'); } catch (error) { console.error('Speech failed:', error.message); }
     }
     return { transcript, reply: answer, audio, audioType: 'audio/mpeg', remembered: data.memories.filter(m => !known.has(m.id)) };
