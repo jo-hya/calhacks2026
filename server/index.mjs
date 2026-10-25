@@ -10,27 +10,41 @@ import { sendSMS } from './bandwidth.mjs';
 import { runAgent } from './agent.mjs';
 import { splitSms } from './sms-text.mjs';
 import { lookupPlace } from './place.mjs';
+import { createVoice } from './voice.mjs';
+import { createMemoryIndex, memoryDoc, transactionDoc } from './memory.mjs';
 
 const PENDING_TTL_MS = 30 * 60 * 1000;
 const NUDGE_COOLDOWN_MS = 20 * 60 * 1000;
 const MAX_HISTORY = 24;
+const MAX_AUDIO_BYTES = 5 * 1024 * 1024;
+const MAX_MEMORIES = 50;
 const TROUBLE = 'Lila is having trouble connecting. An approved action may have completed. Check the app before trying again.';
+// Everything Lila can search for: saved memories and purchases.
+const indexDocs = data => [...data.memories.map(memoryDoc), ...data.state.transactions.map(transactionDoc)];
 
 // `agent` is the Claude agent (on when ANTHROPIC_API_KEY is set); without it the scripted
 // responder in conversation.mjs answers, as before.
 export function createDemoServer({ file = '.pocket/state.json', sync = syncNessie, send = sendSMS, env = process.env, initial, token = randomBytes(24).toString('hex'),
-  agent = env.ANTHROPIC_API_KEY ? runAgent : null, pay = createAgentPurchase, clearAgentPurchases = deleteAgentPurchases, locate = lookupPlace } = {}) {
+  agent = env.ANTHROPIC_API_KEY ? runAgent : null, pay = createAgentPurchase, clearAgentPurchases = deleteAgentPurchases, locate = lookupPlace,
+  voice = createVoice({ env }), memoryIndex = createMemoryIndex({ env }) } = {}) {
   mkdirSync(resolve(file, '..'), { recursive: true });
   let data = initial || (existsSync(file) ? JSON.parse(readFileSync(file, 'utf8')) : { state: createSeed(), proposals: {}, messages: [], inbox: {}, outbox: [] });
-  data = { ...data, agent: data.agent || { pending: null, history: [] } };
+  data = { ...data, agent: data.agent || { pending: null, history: [] }, memories: data.memories || [] };
+  // Search covers what the user told Lila plus their purchases.
+  memoryIndex.sync(indexDocs(data));
   const lastNudge = new Map();
   let queue = Promise.resolve();
   let syncWarning = '';
   const serial = fn => { const result = queue.then(fn); queue = result.catch(() => {}); return result; };
-  function save(next) { writeFileSync(file + '.tmp', JSON.stringify(next)); renameSync(file + '.tmp', file); data = next; }
-  function view() { return { ...data.state, connectionWarning: syncWarning, conversation: data.messages, pendingReply: agent ? (livePending() ? 'YES' : null) : data.proposals.simulation ? `YES ${data.proposals.simulation.code}` : null, agentEnabled: Boolean(agent), smsStatus: data.outbox.slice(-5).map(o => ({ status: o.status, error: o.error })), phone: env.BANDWIDTH_PHONE_NUMBER || '', invitation: INVITATION }; }
+  // Every save keeps the search index in step with the saved memories and purchases.
+  function save(next) { writeFileSync(file + '.tmp', JSON.stringify(next)); renameSync(file + '.tmp', file); data = next; memoryIndex.sync(indexDocs(next)); }
+  function view() { return { ...data.state, connectionWarning: syncWarning, conversation: data.messages, pendingReply: agent ? (livePending() ? 'YES' : null) : data.proposals.simulation ? `YES ${data.proposals.simulation.code}` : null, agentEnabled: Boolean(agent), voiceEnabled: voice.enabled, memories: data.memories, smsStatus: data.outbox.slice(-5).map(o => ({ status: o.status, error: o.error })), phone: env.BANDWIDTH_PHONE_NUMBER || '', invitation: INVITATION }; }
   async function refresh() {
-    try { const state = await sync(data.state); save({ ...data, state }); syncWarning = ''; }
+    try {
+      const state = await sync(data.state);
+      save({ ...data, state });
+      syncWarning = '';
+    }
     catch (error) { syncWarning = 'Nessie could not refresh. Showing the last saved purchases; text approvals require a fresh connection.'; throw error; }
   }
   function livePending() {
@@ -61,6 +75,24 @@ export function createDemoServer({ file = '.pocket/state.json', sync = syncNessi
       const history = [...data.agent.history, ...messages].slice(-MAX_HISTORY);
       while (history.length && history[0].role !== 'user') history.shift();
       saveAgent({ history });
+    }),
+    // Memory (Moss): facts the user told Lila, plus purchases, searchable by meaning.
+    async recall(query, topK = 4) {
+      return (await memoryIndex.search(query, topK)).map(d => ({ id: d.id, kind: d.metadata?.kind, text: d.text }));
+    },
+    remember: fact => serial(() => {
+      const text = fact.trim();
+      const existing = data.memories.find(m => m.text.toLowerCase() === text.toLowerCase());
+      if (existing) return existing;
+      const memory = { id: randomBytes(4).toString('hex'), text, createdAt: new Date().toISOString() };
+      save({ ...data, memories: [...data.memories, memory].slice(-MAX_MEMORIES) });
+      return memory;
+    }),
+    forget: id => serial(() => {
+      const key = String(id).replace(/^mem:/, '');
+      if (!data.memories.some(m => m.id === key)) return false;
+      save({ ...data, memories: data.memories.filter(m => m.id !== key) });
+      return true;
     }),
     async applyPending(id) {
       // Claim the action first so it can't run twice.
@@ -98,7 +130,7 @@ export function createDemoServer({ file = '.pocket/state.json', sync = syncNessi
       });
     }
     let answer;
-    try { answer = await agent({ ops, text, trigger: channel === 'sms' ? 'sms' : 'simulation', bankFresh: fresh }); }
+    try { answer = await agent({ ops, text, trigger: ['sms', 'voice'].includes(channel) ? channel : 'simulation', bankFresh: fresh }); }
     catch (error) { console.error('Agent error:', error.message); answer = TROUBLE; }
     await log({ who: 'You', text, channel }, { who: 'Lila', text: answer, channel });
     return answer;
@@ -165,6 +197,8 @@ export function createDemoServer({ file = '.pocket/state.json', sync = syncNessi
       if (url.pathname.startsWith('/api/')) {
         if (!(req.headers.cookie || '').split(';').some(c => c.trim() === `pocket=${token}`)) return json(401, { error: 'Open the pairing link printed by npm run demo on this device first.' });
         if (req.method === 'GET' && url.pathname === '/api/state') return json(200, view());
+        // Voice takes a raw recording, so it comes before the JSON-only check below.
+        if (req.method === 'POST' && url.pathname === '/api/voice') { const result = await talk(req, url); return json(200, { ...view(), voice: result }); }
         if (req.method !== 'POST' || req.headers['content-type'] !== 'application/json') return json(400, { error: 'Expected a JSON POST.' });
         const input = await body(req);
         // These wait on Claude, so they run outside `serial` (their changes go through ops).
@@ -173,7 +207,30 @@ export function createDemoServer({ file = '.pocket/state.json', sync = syncNessi
           await reply(input.text.trim(), 'simulation');
           return json(200, view());
         }
-        if (url.pathname === '/api/location') return json(200, { ...view(), location: await nudge(input) });
+        // Await first: the view must reflect what the turn changed.
+        if (url.pathname === '/api/location') { const result = await nudge(input); return json(200, { ...view(), location: result }); }
+        if (url.pathname === '/api/voice/ask') {
+          // A typed or tapped question (e.g. a starter prompt) answered like a spoken one.
+          if (typeof input.text !== 'string' || !input.text.trim() || input.text.length > 1000) throw new Error('Invalid message.');
+          const result = await answerAloud(input.text.trim(), input.speak !== false);
+          return json(200, { ...view(), voice: result });
+        }
+        if (url.pathname === '/api/speak') {
+          // Reads a text aloud, e.g. a heads-up notification ("Listen").
+          if (!voice.enabled) throw new Error('Voice is off (no CARTESIA_API_KEY).');
+          if (typeof input.text !== 'string' || !input.text.trim() || input.text.length > 600) throw new Error('Invalid text.');
+          const audio = await voice.speak(input.text.trim());
+          res.writeHead(200, { 'Content-Type': 'audio/mpeg', 'Cache-Control': 'no-store' }); res.end(audio); return;
+        }
+        if (url.pathname === '/api/memories') {
+          if (typeof input.text !== 'string' || !input.text.trim() || input.text.length > 140) throw new Error('Invalid memory.');
+          await ops.remember(input.text);
+          return json(200, view());
+        }
+        if (url.pathname === '/api/memories/forget') {
+          await ops.forget(input.id);
+          return json(200, view());
+        }
         const result = await serial(async () => {
           if (url.pathname === '/api/sync') await refresh();
           else if (url.pathname === '/api/reset') {
@@ -181,7 +238,7 @@ export function createDemoServer({ file = '.pocket/state.json', sync = syncNessi
             if (env.NESSIE_API_KEY) await clearAgentPurchases();
             const state = await sync(createSeed());
             // Keep processed SMS IDs and outbox so delayed callbacks cannot replay actions.
-            save({ ...data, state: { ...state, revision: data.state.revision + 1 }, proposals: {}, messages: [], agent: { pending: null, history: [] } });
+            save({ ...data, state: { ...state, revision: data.state.revision + 1 }, proposals: {}, messages: [], agent: { pending: null, history: [] }, memories: [] });
             lastNudge.clear();
           } else if (url.pathname === '/api/expense') save({ ...data, state: addExpense(data.state, { ...input, source: 'manual' }) });
           else if (url.pathname === '/api/proposal') {
@@ -234,7 +291,33 @@ export function createDemoServer({ file = '.pocket/state.json', sync = syncNessi
     return { sent: true, place: where.place, text };
   }
 
-  return { server, token, refresh: () => serial(refresh), resume: processInbox };
+  // Hold-to-talk: the app sends the recording, Lila answers like a text reply, and the
+  // answer comes back as text plus spoken audio. `remembered` lists facts saved this turn
+  // (the app shows "Remembered: ...").
+  // `?speak=0` (Lila's voice turned off in the app) skips speech and returns captions only.
+  async function talk(req, url) {
+    if (!voice.enabled) throw new Error('Voice is off (no CARTESIA_API_KEY).');
+    const type = String(req.headers['content-type'] || '');
+    if (!type.startsWith('audio/')) throw new Error('Send the recording as audio/webm, audio/mp4 or audio/wav.');
+    const chunks = []; let size = 0;
+    for await (const c of req) { size += c.length; if (size > MAX_AUDIO_BYTES) throw new Error('Recording too long.'); chunks.push(c); }
+    const transcript = await voice.transcribe(Buffer.concat(chunks), type);
+    return answerAloud(transcript, url.searchParams.get('speak') !== '0');
+  }
+
+  // A spoken-style reply (also used by the voice screen's starter prompts), plus the facts
+  // remembered during the turn.
+  async function answerAloud(transcript, speak) {
+    const known = new Set(data.memories.map(m => m.id));
+    const answer = transcript ? await reply(transcript, 'voice') : "Sorry, I didn't catch that. Try again?";
+    let audio = null;
+    if (speak && voice.enabled) {
+      try { audio = (await voice.speak(answer)).toString('base64'); } catch (error) { console.error('Speech failed:', error.message); }
+    }
+    return { transcript, reply: answer, audio, audioType: 'audio/mpeg', remembered: data.memories.filter(m => !known.has(m.id)) };
+  }
+
+  return { server, token, refresh: () => serial(refresh), resume: processInbox, memoryIndex };
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
@@ -249,6 +332,7 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
     console.log(`Lila connected demo: http://127.0.0.1:3002/pair/${app.token}`);
     console.log(`Phone: use your ngrok HTTPS host with /pair/${app.token}`);
     console.log(process.env.ANTHROPIC_API_KEY ? 'Claude agent active. Text Lila from your verified phone.' : 'Scripted responder active (no ANTHROPIC_API_KEY). Text DINNER from your verified phone.');
+    console.log(`Voice: ${process.env.CARTESIA_API_KEY ? 'on (Cartesia)' : 'off (no CARTESIA_API_KEY)'} · Memory search: ${app.memoryIndex.kind === 'moss' ? 'Moss' : 'local (no MOSS_PROJECT_ID / MOSS_PROJECT_KEY)'}`);
     app.resume().catch(() => console.error('Pending SMS could not be processed.'));
   });
 }

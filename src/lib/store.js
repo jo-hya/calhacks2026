@@ -66,5 +66,16 @@ export const store = {
   async reset() { if (connected) return remote('reset', {}); commit(createSeed()); },
   message(text) { return remote('message', { text }); },
   async location(position) { const result = await remote('location', position); return result.location; },
+  // Voice: a recording (or a tapped starter prompt) in; Lila's answer (+ MP3 unless speak is false) out.
+  async voice(recording, speak = true) {
+    const response = await fetch(`/api/voice?speak=${speak ? 1 : 0}`, { method: 'POST', headers: { 'Content-Type': recording.type || 'audio/webm' }, body: recording });
+    // A proxy or tunnel error can return a non-JSON page, so only parse what we can read.
+    const result = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(result.error || 'Lila could not hear that.');
+    publish(result);
+    return result.voice;
+  },
+  async ask(text, speak = true) { const result = await remote('voice/ask', { text, speak }); return result.voice; },
+  forget(id) { return remote('memories/forget', { id }); },
   sync() { return remote('sync', {}); },
 };
