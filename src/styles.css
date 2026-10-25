@@ -46,6 +46,18 @@
 .memory-list{ display: grid; gap: 10px; margin: 8px 0; }
 .memory-list h2{ font-size: 1rem; margin: 0; }
 .memory-row{ display: grid; gap: 4px; padding: 12px; border-radius: 12px; background: rgba(0, 0, 0, 0.04); }
+.memory-pills{ display: flex; flex-wrap: wrap; gap: 8px; }
+.memory-pill{ display: inline-flex; align-items: center; gap: 6px; padding: 6px 8px 6px 12px; border-radius: 999px; background: rgba(0, 0, 0, 0.06); font-size: 0.875rem; max-width: 100%; }
+.memory-pill.unconfirmed{ border: 1px dashed rgba(0, 0, 0, 0.3); }
+.memory-pill button{ background: none; border: 0; padding: 0 2px; cursor: pointer; color: inherit; line-height: 1; }
+.memory-pill .memory-confirm{ font-size: 0.75rem; text-decoration: underline; }
+.memory-pill .memory-x{ font-size: 1.125rem; opacity: 0.6; }
+.memory-add{ display: flex; gap: 8px; }
+.memory-add input{ flex: 1; min-width: 0; height: 40px; }
+.memory-add .button{ height: 40px; min-height: 40px; padding: 0 16px; margin: 0; }
+.settings-group{ display: grid; gap: 8px; margin-top: 26px; }
+.settings-group > h2{ font-size: 1rem; font-weight: 500; margin: 0; }
+.settings-group, .settings-group h2, .memory-list h2{ text-align: left; }
 .memory-row p{ margin: 0; }
 .memory-row small{ color: #6b6b75; }
 .memory-row .modal-actions{ justify-content: flex-start; margin-top: 4px; }

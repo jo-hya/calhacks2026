@@ -51,6 +51,16 @@ function initialPage() { const hash = window.location.hash.slice(1); return [...
 // Time of the newest logged message; a chat started now shows only messages after it.
 const lastMessageAt = state => (state.conversation || []).reduce((latest, m) => m.at && m.at > latest ? m.at : latest, '');
 
+// Plain-language limits shown in Settings; each one matches how the app behaves.
+const TRUST_NOTES = [
+  'Location is opt-in. Lila checks where you are only after you turn on Nearby heads-ups, and you can pause it anytime.',
+  'Memories are yours. See what Lila has saved, confirm it, or delete it.',
+  'Payments need your YES. Lila proposes purchases and transfers, and nothing moves until you approve.',
+  'Prices are estimates. Each place labels its price as an estimate, not a verified quote.',
+  'Sources are linked. Use Details to check where a place came from, and photos credit the photographer.',
+  'Sandbox only. Payments use the Nessie sandbox, so no real money moves.',
+];
+
 export default function App() {
   const state = useSyncExternalStore(store.subscribe, store.getSnapshot);
   const [page, setPage] = useState(initialPage);
@@ -121,7 +131,43 @@ export default function App() {
       </div>}
       {page === 'transactions' && <><PageHeading title="Your spending" subtitle="The little things, all in one place." /><section className="content-surface"><div className="transaction-toolbar"><label className="search-input"><span className="sr-only">Search transactions</span><input placeholder="Search a merchant…" value={search} onChange={e => setSearch(e.target.value)} /></label><label><span className="sr-only">Filter by category</span><select value={filter} onChange={e => setFilter(e.target.value)}><option value="all">All categories</option>{CATEGORIES.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}</select></label></div><TransactionList onEdit={transaction => setModal({ type: 'expense', transaction })} transactions={state.transactions.filter(t => (filter === 'all' || t.category === filter) && t.merchant.toLowerCase().includes(search.toLowerCase())).sort((a,b) => b.date.localeCompare(a.date))} /><button className="button primary full-width" onClick={() => setModal({ type: 'expense' })}><Icon name="plus" />Add expense</button></section></>}
       {page === 'activity' && <><PageHeading title="Your activity" subtitle="A little flexibility goes a long way." /><section className="content-surface"><h2>Budget adjustments</h2>{state.adjustments.length ? <ActivityList adjustments={state.adjustments} /> : <div className="empty-state"><Icon name="transfer" size={32} /><h3>A fresh start.</h3><p>Your confirmed budget moves will appear here.</p></div>}<button className="button primary full-width" onClick={() => setModal({ type: 'transfer' })}>Move budget<Icon name="transfer" /></button></section></>}
-      {page === 'settings' && <><PageHeading title="Your pocket" subtitle="Make room for what matters." /><section className="content-surface profile-panel"><span className="profile-avatar">{profile.name.slice(0,1)}</span><h2>{profile.name}</h2><p>{profile.area} · Personal demo account</p><button className="settings-row" onClick={() => setModal({ type: 'setup' })}>Preferences &amp; monthly budget<Icon name="chevron" /></button><MemoryList memories={state.memories} onError={setToast} /><LocationControl state={state} /><DemoArrival state={state} /><SmsLink state={state} /><button className="settings-row" onClick={() => navigate('activity')}>Budget activity<Icon name="chevron" /></button><InstallPocket /><button className="settings-row" onClick={() => navigate('transactions')}>All transactions<Icon name="chevron" /></button><button className="settings-row" onClick={() => setModal({ type: 'dinner' })}>Make room for dinner<Icon name="chevron" /></button><button className="settings-row" onClick={() => setModal({ type: 'reset' })}>Reset demo<Icon name="reset" /></button><p className="modal-footnote">October 2026 · USD<br />{connected ? 'Shared demo backed by Nessie sandbox purchases.' : 'Demo data saved on this device.'}</p></section></>}
+      {page === 'settings' && <>
+        <PageHeading title="Your settings" subtitle="Make room for what matters." />
+        <section className="content-surface profile-panel">
+          <span className="profile-avatar">{profile.name.slice(0,1)}</span>
+          <h2>{profile.name}</h2>
+          <p>{profile.area} · Personal demo account</p>
+
+          <div className="settings-group">
+            <h2>Your plan</h2>
+            <button className="settings-row" onClick={() => setModal({ type: 'setup' })}>Preferences &amp; monthly budget<Icon name="chevron" /></button>
+            <button className="settings-row" onClick={() => navigate('activity')}>Budget activity<Icon name="chevron" /></button>
+            <button className="settings-row" onClick={() => navigate('transactions')}>All transactions<Icon name="chevron" /></button>
+            <button className="settings-row" onClick={() => setModal({ type: 'dinner' })}>Make room for dinner<Icon name="chevron" /></button>
+          </div>
+
+          <div className="settings-group">
+            <h2>Privacy &amp; memory</h2>
+            <MemoryList memories={state.memories} onError={setToast} />
+            <p className="modal-footnote">Memory search: {state.memorySearch}</p>
+            <section className="memory-list" aria-label="What Lila does and doesn't do"><h2>What Lila does and doesn't do</h2>{TRUST_NOTES.map(note => <div className="memory-row" key={note}><p>{note}</p></div>)}</section>
+          </div>
+
+          <div className="settings-group">
+            <h2>Nearby &amp; texting</h2>
+            <LocationControl state={state} />
+            <DemoArrival state={state} />
+            <SmsLink state={state} />
+          </div>
+
+          <div className="settings-group">
+            <InstallPocket />
+            <button className="settings-row" onClick={() => setModal({ type: 'reset' })}>Reset demo<Icon name="reset" /></button>
+          </div>
+
+          <p className="modal-footnote">October 2026 · USD<br />{connected ? 'Shared demo backed by Nessie sandbox purchases.' : 'Demo data saved on this device.'}</p>
+        </section>
+      </>}
     </main>
     {page !== 'chat' && page !== 'voice' && <nav className="lf-nav" aria-label="Main navigation">{NAV.slice(0,2).map(navItem)}<span className="lf-nav-item"><button className="lf-nav-star" aria-label="Chat with Lila" onClick={startChat}><img src={art('nav-star-cb396.svg')} alt="" /><img className="lf-small-star" src={art('nav-small-star.svg')} alt="" /></button></span>{NAV.slice(2).map(navItem)}</nav>}
     <div className="toast-region" role="status" aria-live="polite">{toast && <div className="toast"><Icon name="check" />{toast}<button aria-label="Dismiss notification" onClick={() => setToast('')}><Icon name="close" /></button></div>}</div>
@@ -165,22 +211,31 @@ function TransactionList({ transactions, onEdit }) {
   if (!transactions.length) return <div className="empty-state"><Icon name="search" size={28} /><h3>No matching transactions.</h3><p>Try another merchant or category.</p></div>;
   return <div className="transaction-list">{transactions.map(t => <div className="transaction-row" key={t.id}><FeedIcon transaction={t} /><div className="merchant-cell"><strong>{t.merchant}</strong><span>{new Date(`${t.date}T12:00:00`).toLocaleDateString('en-US', { month:'short', day:'numeric' })} · {CATEGORIES.find(c => c.id === t.category).name}</span></div>{onEdit && <button className="edit-purchase" aria-label={`Edit ${t.merchant} purchase`} onClick={() => onEdit(t)}>Edit</button>}<strong className="transaction-amount">−{money(t.amountCents, true)}</strong></div>)}</div>;
 }
-// What Lila has saved about the user. Text-sourced facts wait for confirmation before replies use them.
+// What Lila has saved about the user, as pills: type to add one, tap × to delete. Texts wait for a Confirm before Lila uses them.
 function MemoryList({ memories = [], onError }) {
+  const [draft, setDraft] = useState('');
   const run = async action => { try { await action(); } catch (error) { onError(error.message); } };
-  if (!memories.length) return null;
+  async function add(e) {
+    e.preventDefault();
+    const text = draft.trim();
+    if (!text) return;
+    setDraft('');
+    await run(() => store.addMemory(text));
+  }
   return <section className="memory-list" aria-label="What Lila remembers">
     <h2>What Lila remembers</h2>
-    {memories.map(m => <div className="memory-row" key={m.id}>
-      <p>{m.text}</p>
-      <small>{m.confirmed ? `Saved from ${m.source === 'voice' ? 'voice' : 'the app'}` : 'From a text. Not used in replies until you confirm.'}</small>
-      <div className="modal-actions">
-        {!m.confirmed && <button className="button secondary" onClick={() => run(() => store.confirmMemory(m.id))}>Confirm</button>}
-        <button className="button secondary" onClick={() => run(() => store.forget(m.id))}>Delete</button>
-      </div>
-    </div>)}
+    <div className="memory-pills">{memories.map(m => <span className={`memory-pill${m.confirmed ? '' : ' unconfirmed'}`} key={m.id} title={m.confirmed ? `Saved from ${m.source === 'voice' ? 'voice' : 'the app'}` : 'From a text. Not used in replies until you confirm.'}>
+      {m.text}
+      {!m.confirmed && <button type="button" className="memory-confirm" onClick={() => run(() => store.confirmMemory(m.id))}>Confirm</button>}
+      <button type="button" className="memory-x" aria-label={`Delete "${m.text}"`} onClick={() => run(() => store.forget(m.id))}>×</button>
+    </span>)}</div>
+    <form className="memory-add" onSubmit={add}>
+      <input value={draft} onChange={e => setDraft(e.target.value)} maxLength={140} placeholder="Add something Lila should know…" aria-label="Add a memory" />
+      <button className="button secondary" disabled={!draft.trim()}>Add</button>
+    </form>
   </section>;
 }
+
 function ActivityList({ adjustments }) {
   return <div className="activity-list">{adjustments.map(a => <div className="activity-row" key={a.id}><span className="activity-icon"><Icon name="transfer" size={18} /></span><div><strong>{money(a.amountCents)} moved to {CATEGORIES.find(c => c.id === a.to).name.toLowerCase()}</strong><p>From {CATEGORIES.find(c => c.id === a.from).name.toLowerCase()} · Allocation adjustment</p><time dateTime={a.createdAt}>{new Date(a.createdAt).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}</time></div><span className="confirmed"><Icon name="check" size={12} />Confirmed</span></div>)}</div>;
 }

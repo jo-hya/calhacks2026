@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { Fragment, useEffect, useRef, useState } from 'react';
 import { store, connected } from './lib/store.js';
 import { DEFAULT_PROFILE } from './lib/preferences.js';
 import { createVoiceSession, voiceSupported } from './lib/voiceSession.js';
@@ -112,7 +112,10 @@ export function ChatScreen({ state, navigate, since }) {
           </div>)}
         </div>}
       </div> : <ol className="lf-thread" aria-live="polite">
-        {thread.map((m, i) => <li key={`${m.at}-${i}`} className={`lf-bubble ${m.who === 'You' ? 'from-you' : 'from-lila'}`}>{m.text}</li>)}
+        {thread.map((m, i) => <Fragment key={`${m.at}-${i}`}>
+          <li className={`lf-bubble ${m.who === 'You' ? 'from-you' : 'from-lila'}`}>{m.text}</li>
+          {m.remembered?.length > 0 && <li className="lf-remembered">Lila remembered: {m.remembered.join(', ')}</li>}
+        </Fragment>)}
         {pending && <><li className="lf-bubble from-you">{pending}</li><li className="lf-typing"><img src={art('talk-logo-79e59.svg')} alt="" />Lila is thinking…</li></>}
       </ol>}
       {error && <p className="lf-talk-note" role="alert">{error}</p>}
@@ -186,5 +189,6 @@ export function VoiceScreen({ state, navigate }) {
       </button></span>
       <span className="lf-call"><button className="lf-end" aria-label="End conversation" onClick={() => { session.current?.stop(); session.current = null; navigate('chat'); }}><img src={art('voice-end-2cf54.svg')} alt="" /></button></span>
     </div>
+    {state.voiceEnabled && <p className="lf-voice-credit">Voice by Cartesia</p>}
   </section>;
 }

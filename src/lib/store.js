@@ -85,5 +85,6 @@ export const store = {
   removeConversation(from, to) { return remote('conversations/remove', { from, to }); },
   forget(id) { return remote('memories/forget', { id }); },
   confirmMemory(id) { return remote('memories/confirm', { id }); },
+  addMemory(text) { return remote('memories', { text }); },
   sync() { return remote('sync', {}); },
 };

@@ -1,9 +1,8 @@
-# Render Blueprint: runs the Lila server (API + built web app) on Render, so the demo
-# no longer needs the laptop or ngrok. Secrets are entered in the Render dashboard
-# (sync: false) and never committed. See docs/hosted-demo.md.
+# Render Blueprint: a shareable demo behind one password. Create it at dashboard.render.com → New → Blueprint.
+# Secrets are entered in the Render dashboard (sync: false), never committed.
 services:
   - type: web
-    name: lila
+    name: lila-demo
     runtime: node
     plan: free
     buildCommand: npm ci && npm run build
@@ -14,40 +13,12 @@ services:
         value: 22.18.0
       - key: HOST
         value: 0.0.0.0
-      # Build-time values for the web app (public by design; use the anon key only).
-      - key: VITE_SUPABASE_URL
+      - key: DEMO_PASSWORD
         sync: false
-      - key: VITE_SUPABASE_ANON_KEY
-        sync: false
-      # Server-side secrets.
-      # Fixed pairing token so the link survives restarts. Generate with: openssl rand -hex 24
-      - key: PAIR_TOKEN
-        sync: false
+      # Optional. Without these the scripted responder and the seed budget are used.
       - key: ANTHROPIC_API_KEY
-        sync: false
-      - key: CARTESIA_API_KEY
-        sync: false
-      - key: MOSS_PROJECT_ID
-        sync: false
-      - key: MOSS_PROJECT_KEY
         sync: false
       - key: NESSIE_API_KEY
         sync: false
-      - key: NESSIE_ACCOUNT_ID
-        sync: false
-      - key: GOOGLE_MAPS_API_KEY
-        sync: false
-      - key: BANDWIDTH_ACCOUNT_ID
-        sync: false
-      - key: BANDWIDTH_APPLICATION_ID
-        sync: false
-      - key: BANDWIDTH_PHONE_NUMBER
-        sync: false
-      - key: BANDWIDTH_VERIFIED_PHONE_NUMBER
-        sync: false
-      - key: BANDWIDTH_CLIENT_ID
-        sync: false
-      - key: BANDWIDTH_CLIENT_SECRET
-        sync: false
-      - key: BANDWIDTH_WEBHOOK_TOKEN
+      - key: CARTESIA_API_KEY
         sync: false
