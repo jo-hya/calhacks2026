@@ -16,9 +16,11 @@ const remaining = (state, id) => getBudgets(state).find(b => b.id === id).remain
 
 // Minimal in-memory version of the server's ops, for tool-level tests.
 function memoryOps() {
-  let state = createSeed(); let pending = null; const history = []; const paid = [];
+  let state = createSeed(); let pending = null; let lastChange = null; const history = []; const paid = [];
   return {
     paid, get stateNow() { return state; },
+    // Stands in for a budget change made outside the agent (e.g. in the app).
+    changeOutsideAgent: () => { state = { ...state, budgets: { ...state.budgets, groceries: state.budgets.groceries - 100 } }; },
     state: () => state, pending: () => pending, history: () => history,
     setPending: async action => { if (action.kind === 'transfer') proposeTransfer(state, { ...action, id: 'check' }); return (pending = { ...action, id: `act-${history.length}${Math.random()}` }); },
     clearPending: async () => { pending = null; },
@@ -29,37 +31,57 @@ function memoryOps() {
       else paid.push(pending);
       pending = null;
     },
+    moveBudget: async ({ from, to, amountCents }) => {
+      state = confirmTransfer(state, proposeTransfer(state, { from, to, amountCents, id: `move-${Math.random()}` }));
+      lastChange = { undo: { from: to, to: from, amountCents }, after: JSON.stringify(state.budgets) };
+    },
+    undoLast: async () => {
+      if (!lastChange) throw new Error('There is no recent change to undo.');
+      if (JSON.stringify(state.budgets) !== lastChange.after) throw new Error('Your budget changed after that.');
+      state = confirmTransfer(state, proposeTransfer(state, { ...lastChange.undo, id: `undo-${Math.random()}` }));
+      lastChange = null;
+    },
+    updateProfileNow: async () => { throw new Error('not used in these tests'); },
   };
 }
 const tool = (tools, name) => tools.find(t => t.name === name);
 
-test('approval guardrails', async t => {
-  await t.test('cannot propose and confirm in the same turn', async () => {
+test('budget moves from the user apply at once and can be undone', async t => {
+  await t.test('a user request moves budget without a confirmation step', async () => {
     const ops = memoryOps();
     const tools = buildTools(ops, { turnId: 't1', userInitiated: true, bankFresh: true });
-    await tool(tools, 'propose_transfer').run({ from: 'shopping', to: 'dining', amount_dollars: 17 });
-    assert.match(await tool(tools, 'confirm_pending_action').run({ action_id: ops.pending().id }), /Refused/);
+    const result = await tool(tools, 'move_budget').run({ from: 'shopping', to: 'dining', amount_dollars: 17 });
+    assert.match(result, /^Done: moved \$17\.00/);
+    assert.equal(remaining(ops.stateNow, 'dining'), 5500);
+    assert.equal(ops.pending(), null);
+  });
+  await t.test('undo reverses the last move by text', async () => {
+    const ops = memoryOps();
+    const tools = buildTools(ops, { turnId: 't1', userInitiated: true, bankFresh: true });
+    await tool(tools, 'move_budget').run({ from: 'shopping', to: 'dining', amount_dollars: 17 });
+    assert.match(await tool(buildTools(ops, { turnId: 't2', userInitiated: true, bankFresh: true }), 'undo_last_change').run({}), /^Undone/);
     assert.equal(remaining(ops.stateNow, 'dining'), 3800);
+    assert.equal(remaining(ops.stateNow, 'shopping'), 6000);
+    assert.match(await tool(buildTools(ops, { turnId: 't3', userInitiated: true, bankFresh: true }), 'undo_last_change').run({}), /no recent change/);
   });
-  await t.test('location turns and stale bank data cannot confirm', async () => {
+  await t.test('undo refuses once the budget has changed since the move', async () => {
     const ops = memoryOps();
-    await tool(buildTools(ops, { turnId: 't1', userInitiated: true, bankFresh: true }), 'propose_transfer').run({ from: 'shopping', to: 'dining', amount_dollars: 17 });
-    assert.match(await tool(buildTools(ops, { turnId: 't2', userInitiated: false, bankFresh: true }), 'confirm_pending_action').run({ action_id: ops.pending().id }), /Refused/);
-    assert.match(await tool(buildTools(ops, { turnId: 't3', userInitiated: true, bankFresh: false, approvedActionId: ops.pending().id }), 'confirm_pending_action').run({ action_id: ops.pending().id }), /Nessie/);
-  });
-  await t.test('a later user reply confirms the exact action', async () => {
-    const ops = memoryOps();
-    await tool(buildTools(ops, { turnId: 't1', userInitiated: true, bankFresh: true }), 'propose_transfer').run({ from: 'shopping', to: 'dining', amount_dollars: 17 });
-    const later = buildTools(ops, { turnId: 't2', userInitiated: true, bankFresh: true, approvedActionId: ops.pending().id });
-    assert.match(await tool(later, 'confirm_pending_action').run({ action_id: 'act-wrong' }), /Refused/);
-    assert.match(await tool(later, 'confirm_pending_action').run({ action_id: ops.pending().id }), /Done/);
+    await tool(buildTools(ops, { turnId: 't1', userInitiated: true, bankFresh: true }), 'move_budget').run({ from: 'shopping', to: 'dining', amount_dollars: 17 });
+    ops.changeOutsideAgent();
+    assert.match(await tool(buildTools(ops, { turnId: 't3', userInitiated: true, bankFresh: true }), 'undo_last_change').run({}), /Error: Your budget changed/);
     assert.equal(remaining(ops.stateNow, 'dining'), 5500);
   });
-  await t.test('impossible transfers are explained, not proposed', async () => {
+  await t.test('location turns and stale bank data cannot move budget', async () => {
     const ops = memoryOps();
-    const result = await tool(buildTools(ops, { turnId: 't1', userInitiated: true, bankFresh: true }), 'propose_transfer').run({ from: 'shopping', to: 'dining', amount_dollars: 500 });
+    assert.match(await tool(buildTools(ops, { turnId: 't2', userInitiated: false, bankFresh: true }), 'move_budget').run({ from: 'shopping', to: 'dining', amount_dollars: 17 }), /Refused/);
+    assert.match(await tool(buildTools(ops, { turnId: 't3', userInitiated: true, bankFresh: false }), 'move_budget').run({ from: 'shopping', to: 'dining', amount_dollars: 17 }), /Nessie/);
+    assert.equal(remaining(ops.stateNow, 'dining'), 3800);
+  });
+  await t.test('impossible moves are explained, not applied', async () => {
+    const ops = memoryOps();
+    const result = await tool(buildTools(ops, { turnId: 't1', userInitiated: true, bankFresh: true }), 'move_budget').run({ from: 'shopping', to: 'dining', amount_dollars: 500 });
     assert.match(result, /Only \$60 is available/);
-    assert.equal(ops.pending(), null);
+    assert.equal(remaining(ops.stateNow, 'dining'), 3800);
   });
 });
 
@@ -113,12 +135,12 @@ test('place kinds map to budget categories', () => {
 });
 
 // A server wired to a fake agent that drives ops the way Claude's tools would.
-async function agentServer(t, { agent, locate, pay = async () => 'p1', send } = {}) {
+async function agentServer(t, { agent, locate, geocode = async () => null, pay = async () => 'p1', send, sync: syncOverride } = {}) {
   const dir = mkdtempSync(join(tmpdir(), 'pocket-agent-'));
   const sent = [];
   const env = { BANDWIDTH_WEBHOOK_TOKEN: 'hook', BANDWIDTH_APPLICATION_ID: 'app', BANDWIDTH_PHONE_NUMBER: '+12025550100', BANDWIDTH_VERIFIED_PHONE_NUMBER: '+12025550101' };
   let syncs = 0;
-  const app = createDemoServer({ file: join(dir, 'state.json'), env, token: 'pair', sync: async s => { syncs++; return s; }, send: send || (async text => { sent.push(text); return `sent-${sent.length}`; }), agent, pay, locate });
+  const app = createDemoServer({ file: join(dir, 'state.json'), env, token: 'pair', sync: async s => { syncs++; return syncOverride ? syncOverride(s, syncs) : s; }, send: send || (async text => { sent.push(text); return `sent-${sent.length}`; }), agent, pay, locate, geocode });
   app.server.listen(0, '127.0.0.1'); await once(app.server, 'listening');
   t.after(async () => { await new Promise(r => app.server.close(r)); rmSync(dir, { recursive: true, force: true }); });
   const base = `http://127.0.0.1:${app.server.address().port}`;
@@ -142,6 +164,25 @@ test('texts are answered by the agent and split for SMS', async t => {
   assert.equal(remaining(state, 'dining'), 5500);
   assert.equal(state.adjustments.length, 1);
   assert.equal(state.conversation.at(-1).text, 'Done!');
+});
+
+test('a changed budget invalidates a Claude transfer review', async t => {
+  const agent = async ({ ops, text }) => {
+    if (text === 'DINNER') {
+      await ops.setPending({ kind: 'transfer', from: 'shopping', to: 'dining', amountCents: 1700, turn: 'a' });
+      return 'Move $17?';
+    }
+    await ops.applyPending(ops.pending().id);
+    return 'Done.';
+  };
+  const { api } = await agentServer(t, {
+    agent,
+    sync: (state, count) => count > 1 ? { ...state, revision: state.revision + 1 } : state,
+  });
+  await api('/api/message', { text: 'DINNER' });
+  const state = await api('/api/message', { text: 'YES' });
+  assert.equal(state.adjustments.length, 0);
+  assert.match(state.conversation.at(-1).text, /trouble connecting/);
 });
 
 test('approved ALT payments go through Nessie and are re-imported', async t => {
@@ -202,4 +243,74 @@ test('location nudges', async t => {
   assert.match((await api('/api/location', { lat: 1, lng: 0 })).location.reason, /recently/);
   assert.equal((await api('/api/location', { lat: 3, lng: 0, place: 'Library Cafe', category: 'dining' })).location.sent, false); // agent says SKIP
   assert.equal(sent.length, 1);
+});
+
+test('demo arrival runs the real location turn, even right after a nudge there', async t => {
+  const calls = [];
+  const agent = async args => { calls.push(args); return 'Heads up: $38 left for Dining.'; };
+  const { api, sent } = await agentServer(t, { agent, locate: async () => ({ place: 'Gather', category: 'dining' }) });
+  await api('/api/location', { lat: 1, lng: 0 }); // recent nudge at Gather
+  assert.equal((await api('/api/demo-arrival', { delaySeconds: 0 })).scheduledInSeconds, 0);
+  for (let i = 0; i < 50 && sent.length < 2; i++) await new Promise(r => setTimeout(r, 10));
+  assert.equal(sent.length, 2);
+  assert.equal(calls.at(-1).trigger, 'location');
+  assert.equal(calls.at(-1).location.place, 'Gather');
+});
+
+test('a text move applies at once and a text undo reverses it on the server', async t => {
+  const agent = async ({ ops, text }) => {
+    if (text === 'MOVE') { await ops.moveBudget({ from: 'shopping', to: 'dining', amountCents: 2000 }); return 'Moved $20.'; }
+    if (text === 'UNDO') { await ops.undoLast(); return 'Undone.'; }
+    return '?';
+  };
+  const { api } = await agentServer(t, { agent });
+  let state = await api('/api/message', { text: 'MOVE' });
+  assert.equal(remaining(state, 'dining'), 5800);
+  assert.equal(state.adjustments.length, 1);
+  assert.equal(state.pendingReply, null);
+  state = await api('/api/message', { text: 'UNDO' });
+  assert.equal(remaining(state, 'dining'), 3800);
+  assert.equal(remaining(state, 'shopping'), 6000);
+  assert.equal(state.adjustments.length, 2);
+  assert.equal(state.conversation.at(-1).text, 'Undone.');
+});
+
+test('saved recommendations carry map coordinates when a place can be found', async t => {
+  const places = { Gather: { lat: 37.8697, lng: -122.2668 } };
+  const agent = async ({ ops }) => {
+    await ops.recommendations([
+      { name: 'Gather', area: 'Berkeley', description: 'Cozy.', estimatedPrice: 25, sourceUrl: 'https://example.com/gather' },
+      { name: 'Unmapped Cafe', area: 'Berkeley', description: 'Cheap.', estimatedPrice: 9, sourceUrl: 'https://example.com/cafe' },
+    ]);
+    return 'Saved.';
+  };
+  const { api } = await agentServer(t, { agent, geocode: async ({ name }) => places[name] ?? null });
+  const state = await api('/api/message', { text: 'NEARBY' });
+  assert.deepEqual(state.recommendations.map(p => [p.name, p.lat ?? null]), [['Gather', 37.8697], ['Unmapped Cafe', null]]);
+});
+
+test('a purchase approved after the budget changed is refused and not paid', async t => {
+  const paid = [];
+  const agent = async ({ ops, text }) => {
+    if (text === 'ALT') { await ops.setPending({ kind: 'purchase', merchant: 'Taqueria', category: 'dining', amountCents: 1500, turn: 'a' }); return 'Pay $15?'; }
+    await ops.applyPending(ops.pending().id); return 'Paid.';
+  };
+  const { api } = await agentServer(t, { agent, pay: async p => { paid.push(p); return 'p9'; },
+    sync: (state, count) => count > 1 ? { ...state, revision: state.revision + 1 } : state });
+  await api('/api/message', { text: 'ALT' });
+  const state = await api('/api/message', { text: 'yes' });
+  assert.equal(paid.length, 0);
+  assert.match(state.conversation.at(-1).text, /trouble connecting|changed/);
+});
+
+test('two approvals that arrive together pay once', async t => {
+  const paid = [];
+  const agent = async ({ ops, text }) => {
+    if (text === 'ALT') { await ops.setPending({ kind: 'purchase', merchant: 'Taqueria', category: 'dining', amountCents: 1500, turn: 'a' }); return 'Pay $15?'; }
+    try { await ops.applyPending(ops.pending().id); return 'Paid.'; } catch (error) { return error.message; }
+  };
+  const { api } = await agentServer(t, { agent, pay: async p => { paid.push(p); await new Promise(r => setTimeout(r, 150)); return 'p9'; } });
+  await api('/api/message', { text: 'ALT' });
+  await Promise.all([api('/api/message', { text: 'yes' }), api('/api/message', { text: 'yes' })]);
+  assert.equal(paid.length, 1);
 });

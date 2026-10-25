@@ -8,6 +8,7 @@ import android.content.pm.ApplicationInfo;
 public class MainActivity extends BridgeActivity {
     @Override
     public void onCreate(Bundle savedInstanceState) {
+        registerPlugin(LilaLocationPlugin.class);
         super.onCreate(savedInstanceState);
         pairForUsbDebugging(getIntent());
     }

@@ -1,478 +1,256 @@
-> **Latest implementation update (October 25, 2026):** The app is now named **Lila**. The SMS + Nessie rehearsal, a Claude agent, Cartesia voice, Moss memory, and an Android debug build are implemented. See the [Current status](#current-status-october-25-2026) below and [phone-demo.md](docs/phone-demo.md) / [claude-agent.md](docs/claude-agent.md) / [voice-memory.md](docs/voice-memory.md) for details. Phase checkboxes below predate this work unless marked. Supabase is still not connected.
+# Pocket / Lila - Build Checklist and Team Handoff
 
-# pocket (Lila) — Phased Build Plan & Team Handoff
+**Reviewed October 24, 2026 against the current checkout.** The product is now branded **Lila**; this filename and internal `pocket` identifiers remain for continuity.
 
-**Cal Hacks 13.0 · Updated October 25, 2026 · Primary demo: forwarded dinner invitation · Notification-free core**
+## Current stage
 
-## Current status (October 25, 2026)
+**We are in Phase 5: integration validation and real-phone rehearsal, with Phase 6 demo packaging next.** The frontend, shared demo backend, Nessie importer, Bandwidth webhook, and Claude agent are implemented. This is beyond the original browser-only prototype. It is a single-user connected hackathon demo, not yet a production multi-user app.
 
-**Built and working (locally, with the demo server):**
-- React/Vite app (`src/`) with Overview, Budgets, Transactions, Activity, transfer review/confirm, manual expenses, reset, and browser-only fallback (`src/lib/store.js`).
-- Node server (`server/index.mjs`) that owns the shared state in `.pocket/state.json` (atomic file writes, serialized changes), serves the built app, and handles private pairing (cookie).
-- **Nessie** sandbox import: 12 labeled purchases for October 2026 with stable IDs and no duplicate imports. Import fails closed on unknown categories or provider errors (`server/nessie.mjs`, `scripts/seed-nessie.mjs`).
-- **Bandwidth SMS** inbound/outbound through the ngrok tunnel. Callbacks are validated and deduplicated, with replies persisted before side effects (`server/bandwidth.mjs`, `server/sms-text.mjs`).
-- **Claude agent** (`server/agent.mjs`, default model `claude-opus-5-5`) answers texts and app chat with tools for budgets, transactions, budget transfers, purchases, memory, and web search. Without `ANTHROPIC_API_KEY`, a scripted responder (`server/conversation.mjs`) answers instead.
-- **Voice** (`server/voice.mjs`): Cartesia speech-to-text and text-to-speech, on when `CARTESIA_API_KEY` is set.
-- **Memory** (`server/memory.mjs`): saved facts plus purchases, searchable through Moss when `MOSS_PROJECT_ID`/`MOSS_PROJECT_KEY` are set, with a local word-overlap fallback. Saved memories are capped at 50 and sent in the app state, but the UI does not display them yet.
-- **Android**: Capacitor debug APK (`com.pocket.budget`, app name Lila) that opens the same React app over USB (`docs/android-usb.md`).
-- **Tests:** `npm test` passes 55 tests (budget logic, callbacks, agent, voice/memory, demo flow).
+**Last update (October 24, late evening):** budget moves and profile changes requested by text now apply immediately and can be undone by text; Nearby shows a Leaflet map with one pin per recommended place, and tapping a card or pin highlights it; Home matches the Figma V2 frame; the Android build with these changes is installed on the presentation phone. Live Claude text flow was checked once (move, then undo). Not yet verified: screen-off background location, and the Nearby map on the handset with real recommendations.
 
-**Recently fixed on `voice-memory` (uncommitted at time of writing):**
-- Memory index stays in step with saved data. Evicted, forgotten, reset, manual-expense, and refreshed purchases are all reconciled on every save.
-- Moss setup retries; search drops removed docs and weak matches; startup removes stale Moss docs from earlier runs.
-- Texts can save memories; only the app and voice can delete them.
-- Client error handling for voice requests.
+**Design decision:** the user asked that budget moves requested in their own message apply without a second confirmation, with undo by text. This relaxes the earlier "approval before any budget change" rule for budget moves and profile changes only. Transaction edits and purchases still require an explicit YES. Forwarded text and location updates still cannot change budgets.
 
-**Verified live (previous sessions, per [phone-demo.md](docs/phone-demo.md)):** Bandwidth outbound, real Android inbound through ngrok, live Nessie read with the expected totals, and the $55 invitation → $20 transfer flow in the browser. A real-handset receipt of the new flow still needs a test.
+The original plan assumed Supabase would precede integration. The implemented demo instead uses one Node process, serialized mutations, and file-backed state. That enables the connected demo now; it does not complete the original Supabase/authentication/database-transaction requirements. Production hardening remains a separate unfinished milestone.
 
-**Not yet verified:** Live Moss indexing and relevance thresholds, live Claude agent replies on the phone, live Cartesia voice on the Android build, and the memory fixes against real providers.
+**Immediate gate for the existing demo:** prove the current Claude -> real SMS -> shared budget -> actual phone UI flow repeatedly, close the approval gaps below, and capture a backup recording. Do not mark the core demo complete based only on mocked tests or the older scripted browser rehearsal.
 
-**Not built:** Supabase and any production authentication (the pairing cookie is a single-user demo gate), authenticated server-side transfers with database transactions, multi-user data, group budgets, Visa merchant suggestions, x402 payments, and final submission artifacts.
+## Next steps (ordered, as of October 24 late evening)
 
-## Gaps to address before the demo
+1. **Screen-off location test on the presentation phone:** lock the phone after tapping Arrive (or start Nearby heads-ups), confirm a heads-up text arrives and the notification shows. Fix anything that fails before anything else.
+2. **Full dinner rehearsal on the handset:** reset, forward the $55 invitation, confirm the $17 shortfall, approve the $20 move by text, and check the app shows $58 / $40 with one entry. Then rehearse "undo" by text.
+3. **Nearby on the handset with real recommendations:** ask Lila for places, confirm pins appear and card or pin taps highlight correctly.
+4. **Pending-action revision check for transaction edits and purchases** (Phase 3 item above).
+5. **Figma gaps:** Location Recommender photos and the Weekly pill on the map. Dashboard and Home already match.
+6. **Onboarding and transaction editing:** both are required, but only in minimal form. Group planning stays a stretch goal.
+7. **Backup recording and submission assets** once steps 1 and 2 pass on the handset.
 
-1. **Identity and authorization:** A single pairing cookie gates everything. Anyone with the link on the same server instance has full access, and the pairing token changes on every restart.
-2. **Forwarded text as trusted context:** Texts can save memories and can carry an exact "yes" that approves a transfer. The app does not display memories, so a user can't see or remove a bad one. Show memories in the app, then tag provenance and confirm text-sourced facts.
-3. **Real-provider verification:** The memory and agent changes need a live run with Moss, Anthropic, and Cartesia keys. The 0.3 relevance threshold is a guess until tested.
-4. **Handset verification:** The new agent-driven SMS flow and the Android voice path haven't been tested on the phone.
-5. **Documentation drift:** `phone-demo.md` still cites 28 tests (now 55) and the README's "Next steps" point at Supabase only. Update both when the fixes are committed.
-6. **Demo reliability:** Keep the seed reset, ngrok, and Bandwidth callback URL in sync at demo time. Record a backup video of a full real-SMS run.
+## Product direction clarified after the implementation review
 
-## Next steps
+The user has now expanded the intended MVP beyond the dinner-transfer demo. The phase status above describes existing code, not completion of this expanded scope.
 
-1. Commit the memory/agent fixes on `voice-memory` after reviewing the diff; open the PR against `main`.
-2. Run one live pass with `MOSS_*`, `ANTHROPIC_API_KEY`, and `CARTESIA_API_KEY` set: check recall quality, the 0.3 threshold, and a forwarded-invitation text end to end.
-3. Test the full SMS flow on the Android phone from a clean reset, including `CANCEL`, duplicate delivery, and an expired `YES <code>`.
-4. Decide whether text-sourced memories need confirmation before they reach future replies.
-5. If Supabase is still in scope for the prize story, start the schema and authenticated transfer work (Phase 2–3 below); otherwise document the file-backed state as the demo boundary.
-6. Update this checklist and `phone-demo.md` with the verified results, then prepare the backup recording and the architecture slide.
+- **Promise:** Lila is a proactive, conversational budgeting assistant that learns from spending and preferences and helps people enjoy their money with less manual work.
+- **Conversation:** private SMS is the primary conversation surface. The app provides onboarding, personalized recommendations, financial controls, and group planning; an in-app chatbot is not a priority.
+- **Three paths:** when a plan exceeds a category allocation, explain options to move available discretionary budget with approval, find a similar cheaper alternative, or skip spending / suggest a free activity. Do not invent transferable funds or shame the user.
+- **Proactive location:** the user explicitly wants texts while the app is closed. Native background location is now a product requirement, superseding earlier out-of-scope wording. The current foreground implementation does not meet it.
+- **Design authority:** only the Figma Codex page; frames ending in `- Final` supersede older screens. Adapt other screens to the same visual direction. Do not treat other Figma pages as requirements.
+- **Transactions:** allow edits to any transaction and addition of missing purchases. Preserve original imported records and user overrides separately so subsequent sync does not erase corrections. A visit alone must not become a confirmed expense.
+- **Groups:** people privately contribute outing preferences and spending comfort limits; Lila proposes activities without exposing individual finances. No group implementation exists yet.
+- **Onboarding:** budgets, preferences, data-source selection, phone setup, and location consent are missing product flows and are required to make the app usable beyond the preset profile.
+- **Delivery target:** roughly 12 hours, one Android presentation phone. Real group SMS participation versus forwarding to private Lila SMS, and friend participation through web links versus SMS, remain open decisions.
 
-## Tech stack and architecture
+## Evidence and status conventions
 
-- **Frontend:** React 19 + Vite 6, plain CSS (`src/styles.css`), wrapped in a Capacitor 8 Android shell. Browser-local demo mode when no server is present.
-- **Server:** Node 22.18+ ESM (`server/`), no framework. Plain `http` server, file-backed state, single process with a serialized work queue.
-- **Money and budgets:** Integer cents in pure functions (`src/lib/budget.js`) shared by the browser and server.
-- **External services:** Capital One **Nessie** (purchase data, sandbox), **Bandwidth** (SMS via a Build application, webhook through **ngrok**), **Anthropic** Claude (agent with tool use and server-side web search), **Cartesia** (Ink STT, Sonic TTS), **Moss** (semantic memory search).
-- **Data flow:** Nessie → import → saved state → budget math → agent tools. SMS/app/voice → `server/index.mjs` → agent → proposal → explicit approval → budget change in saved state → memory index sync.
-- **Safety model:** Proposals are server-owned with expiry and state checks; transfers only change category allocations, never bank money; approvals must match a live proposal code; SMS callbacks are deduplicated.
-- **Tests:** Node's built-in `node --test` (`npm test`).
+- `[x]` means the named implementation or check exists; it does not imply live provider or handset verification unless explicitly stated.
+- `[ ]` means unfinished or not verified with available evidence.
+- **Verified in this review:** `npm test` passes (44 tests reported by Node, including nested/parent tests); `npm run build` passes.
+- **Previously documented verification:** [phone-demo.md](docs/phone-demo.md) records live Nessie reads of 12 purchases, public HTTPS pairing/state reads, and a 390px scripted browser rehearsal ending at $58 Dining / $40 Clothing. These were not rerun in this review.
+- **Implemented, live verification still open:** Claude responses with the configured model/key, the complete current handset SMS exchange, live ALT sandbox purchases, location-triggered SMS, and the current APK on the presentation phone.
+- An Android debug APK exists locally. Its presence alone does not prove a fresh native build or successful installation; neither was performed in this review.
+- This review did not send SMS, call paid model APIs, reseed Nessie, reset shared data, or change provider settings.
 
----
+## Phase 1 - App baseline and integration contract: mostly implemented
 
-## Original plan (predates the Lila/Claude work; retained for reference)
+- [x] React/Vite frontend, now branded Lila, with Home, Budgets, Activity, Profile, quick actions, and transaction browsing.
+- [x] Separate browser-only mode (`npm run dev`) from connected mode (`npm run build`, then `npm run demo`). Browser-only data stays in localStorage; connected mode calls the shared server.
+- [x] Implement actual interfaces in `server/index.mjs`: `GET /api/state`; JSON POSTs to `/api/sync`, `/api/message`, `/api/proposal`, `/api/transfer`, `/api/expense`, `/api/reset`, and `/api/location`.
+- [x] Private pairing link installs a cookie; the webhook checks its token, configured sender, recipient, and application.
+- [x] Document setup in [phone-demo.md](docs/phone-demo.md), [claude-agent.md](docs/claude-agent.md), and [android-usb.md](docs/android-usb.md).
+- [ ] Consolidate the final agent/data contract with request/response examples, money units, error behavior, approval semantics, and ownership. `docs/agent-integration-contract.md` does not yet exist.
+- [ ] Reconcile older README and setup wording with the current Claude implementation and the two distinct command modes below.
 
-**Cal Hacks 13.0 · Originally October 24, 2026 · Primary demo: forwarded dinner invitation · Notification-free core**
+**Boundary:** pairing authorizes access to one shared demo profile. It is not production login or a multi-user identity model. Internal monetary state uses integer cents; Claude proposal tools accept dollars and convert them.
 
-> **Product vision:** Pocket helps college students and recent graduates make informed spending decisions **before** they buy. The intended connected experience lets a user forward an ordinary text about plans, ask financial questions, and—with explicit confirmation—adjust a budget grounded in app data. The basic app now works with local demo data; the connected SMS experience is still future work.
->
-> **Current implementation:** A new React/Vite app provides budgets, transactions, manual expenses, confirmed local budget transfers, activity history, and demo reset. The pre-existing Bandwidth scripts are independent connectivity smoke tests, not the product backend. Earlier real-SMS success is reported; the local callback tests were rerun successfully during review. Supabase, Nessie, and the conversational agent are not integrated into the app yet.
+## Phase 2 - Financial foundation: connected demo implemented
 
-## Important scope decisions
+- [x] Derive category spending and remaining amounts from transactions using integer cents.
+- [x] Seed the October 2026 dinner scenario: Dining $120 allocated / $82 spent / $38 remaining; Clothing $150 allocated / $90 spent / $60 remaining. Clothing retains internal category ID `shopping`.
+- [x] Import Nessie sandbox purchases with stable external IDs; restrict imports to the supported period/statuses, retain manual entries, and surface category/import errors.
+- [x] Provide repeatable labeled sandbox seeding (`npm run nessie:seed`) and shared demo reset.
+- [x] Persist shared state in ignored `.pocket/` files and serialize mutations within one Node process.
+- [x] Refresh Nessie before message handling and transfer confirmation; show a warning on refresh failure and block approvals that require fresh data.
+- [ ] Implement Supabase schema/migrations, authenticated user mapping, RLS, and durable database transactions if proceeding beyond the single-user demo.
 
-- **Primary experience:** User-initiated, natural-language SMS conversation grounded in their Pocket financial data.
-- **Primary demo:** Forward/copy a friend's dinner invitation → ask whether it's affordable → discuss options → approve a budget adjustment → see the updated balances in the app.
-- **Not a core feature anymore:** Push notifications, always-on location tracking, proximity-triggered alerts, and geofencing. **Do not spend core build time on notification infrastructure.**
-- **Frontend technology:** The basic app has now been built from scratch with **React and Vite**. Extend this responsive web interface; no Expo or mobile framework migration is needed.
-- **Agent ownership:** Your teammate builds the conversational Claude/Fetch.ai agent and connects it to Bandwidth. **You are not implementing the agent or the SMS-to-agent wiring.**
-- **Shared responsibility:** You and your teammate agree on the financial-data/tool contract and verify one complete flow together.
-- **Execution priority:** Follow the phase gates below. P0 means required for the core demo; full transaction filtering, extensive category pages, automatic refresh, and optional prize features must not block it.
-- **Financial language:** Describe whether a purchase fits the available category allocation. A category budget alone does not establish overall financial affordability.
+**Reset distinction:** seed setup preserves unrelated purchases. Connected reset also deletes agent-created Nessie sandbox purchases. Inspect any uncertain payment outcome before resetting; reset is not simply clearing browser storage.
 
-## Phased execution plan
+**Acceptance baseline:** Dining $38 and Clothing $60 remaining. A $20 allocation move yields $58 / $40 without changing spending or creating a bank payment.
 
-**Critical sequence:** contract → coherent data → safe transfer → visible frontend result → real SMS integration → rehearsal.
+## Phase 3 - Safe actions: demo safeguards implemented; gaps remain
 
-**Baseline clarified by the user (October 24, 2026):** The product started from scratch. The original `scripts/` files only tested whether Bandwidth could work. They are not the application's architecture and should remain independent of the frontend.
+- [x] Local/UI/scripted transfer proposals validate amount and categories, preserve state revision, expire, and reject stale confirmation.
+- [x] Duplicate transfer confirmation is idempotent in budget logic; confirmed transfers preserve total allocation and record activity.
+- [x] Claude can propose transfers and sandbox purchases, read budgets/transactions, and cancel a pending action.
+- [x] Claude tool guards require a later user-initiated exact `YES`, the pending action captured at turn start, and a successful Nessie refresh. Forwarded text and location updates cannot themselves approve actions.
+- [x] Persist payment attempts before Nessie submission; uncertain attempts reconcile against Nessie after restart without submitting another purchase. Automated coverage exists.
+- [x] Persist callback IDs/outbound status and test duplicate callbacks, provider failures, and budget commits surviving outbound failure.
+- [x] Budget moves and profile changes from the user's own text apply immediately (`move_budget`, `update_profile`), are refused for location turns and stale bank data, and can be reversed with `undo_last_change` while the budgets still match the change. Covered by agent and server tests, plus one live Claude move/undo check.
+- [ ] **Close the Claude stale-proposal gap for pending transaction edits and purchases:** these still go through `setPending`/`applyPending`. Revision checks exist for edits and expenses; purchases should be checked the same way. Test intervening purchases/allocation changes. (Budget moves no longer use pending proposals.)
+- [ ] Verify/isolate pending actions across browser and SMS in Claude mode. The scripted responder uses channel-specific proposals; Claude currently shares one pending action and conversation history.
+- [ ] Add targeted coverage for overlapping Claude turns/confirmations and restart boundaries between action commit, inbox completion, and reply queuing. Existing callback tests do not prove every crash window or concurrent agent interaction.
+- [ ] For production, replace process-local serialization/file replacement with authenticated transactional storage and multi-instance concurrency guarantees.
 
-### Basic app milestone — implemented locally
+**Completion gate:** exact-action approval, stale rejection, cancellation, expiry, replay, concurrent confirmation, and provider recovery are demonstrated for the selected demo mode, not inferred from tests of a different path.
 
-- [x] React/Vite app with responsive Overview, Budgets, Transactions, and Activity screens.
-- [x] Fictional October demo user with transaction-derived balances: $38 dining / $60 shopping remaining.
-- [x] Category detail dialogs, merchant search, category filters, and manual expense entry.
-- [x] Transfer review and confirmation, amount/category validation, stale/expired proposal rejection, and duplicate-confirmation protection in the local demo logic.
-- [x] Browser-local persistence, adjustment history, and reset to the dinner scenario.
-- [x] Budget logic tests and production build; independent Bandwidth callback tests retained.
-- [x] Browser verification: desktop/mobile transfer, cancel, persistence, transaction search/filtering, expense entry, category details, and reset. All four screens fit 390px, 768px, and 1440px widths without horizontal overflow; no browser console errors observed.
-- [ ] Shared authenticated data, real account identity, Supabase migrations/RLS, atomic server transfers, Nessie imports, and SMS/agent integration.
+## Phase 4 - Frontend and phone delivery: implemented, final device check open
 
-**Current boundary:** `src/lib/budget.js` contains pure calculations and demo operations; `src/lib/store.js` is the replaceable local persistence adapter. localStorage is not an authorization system or an atomic shared database. Local confirmation behavior does not complete the server-side safety requirements in Phase 3.
+- [x] Category budgets, spending feed, searchable/filterable transactions, expense entry, transfer review, and adjustment history.
+- [x] Connected store uses backend reads/mutations and polls shared state every three seconds; connection warnings and Nessie refresh are available.
+- [x] Browser text rehearsal uses shared server state; browser-only mode remains available separately.
+- [x] Installable web app assets and pairing instructions are present.
+- [x] Capacitor Android project and USB build/run scripts are present; no Expo migration is needed.
+- [x] Home matches the Figma "Home Screen - Final V2" frame (daily-spend chart with Weekly pill and callout, suggestion line). Dashboard matches "Dashboard - Final". Location Recommender is close; photos and the Weekly pill on the map are missing.
+- [ ] Run the current build on the presentation phone and verify pairing, readable balances, activity updates, reconnect, and reset. (Installed and launched on the handset on October 24; the Home screen renders. Reset and balance checks still open.)
+- [ ] Confirm the chosen setup works throughout the demo: Android debug app needs the laptop backend and USB port forwarding; public browser access and inbound SMS use the tunnel.
 
-**Next build order:** Agree on the agent/data contract → add Supabase and demo-user authentication → implement server-side transfer proposal/confirmation → replace the local adapter and verify the existing UI → integrate the teammate's agent. Phase 4's visual foundation is already built; its shared-backend acceptance gate remains open.
+**Completion gate:** a backend-approved $20 move visibly changes the actual presentation UI to $58 / $40 with one adjustment entry.
 
-### Phase 1 — Establish the baseline and agree on the contract
+## Phase 5 - Claude/SMS integration and rehearsal: current focus
 
-**Owner:** You, with your teammate for interface and identity decisions. **Dependency:** None.
+- [x] Text budget moves and profile changes apply immediately, with undo by text (see Phase 3). Live check: "move $10 from Groceries to Dining" then "undo that" restored the balances.
+- [x] Nearby recommendations are geocoded (OpenStreetMap) and shown as Leaflet map pins; tapping a card or pin highlights both. Verified in a browser screenshot; not yet on the handset with real recommendations.
 
-- [x] Review the original checkout: `scripts/` contains only Bandwidth smoke tests; the user confirmed there was no existing product app to locate.
-- [x] Create and document the basic React/Vite app. Start it with `npm run dev`; see the README for the current implementation boundaries.
-- [ ] Maintain an implementation-status log distinguishing **working locally / implemented but untested / connected and verified / not yet built**. Do not count local fixtures as live integrations.
-- [ ] Agree on the canonical demo user, verified SMS sender mapping, budget period, currency, category identifiers, and authenticated access model.
-- [ ] Start `docs/agent-integration-contract.md` with actual routes/functions, request/response examples, money units, error codes, and ownership. Identify proposed interfaces explicitly until implemented.
-- [ ] Assign the shared backend ownership of immutable transfer proposals, expiration, cancellation, and execution state. Your teammate owns conversation context and collecting explicit approval tied to a proposal ID.
-- [ ] Define how approval reaches the authenticated backend, how stale financial state invalidates a proposal, and how the frontend reloads agent-initiated changes.
+- [x] Claude tool loop and bounded text history are wired into `server/agent.mjs` and the shared server when `ANTHROPIC_API_KEY` is set.
+- [x] Scripted responder remains available when no Claude key is configured. A runtime Claude error produces a failure response; it does not transparently switch to the scripted responder.
+- [x] Bandwidth inbound/outbound handling and SMS splitting are implemented. Automated tests use substituted providers; they are not proof of live Claude or handset delivery.
+- [ ] Verify the configured model/key works with the actual provider and that startup reports the intended responder mode.
+- [ ] Verify current tunnel, Bandwidth callback, and approved recipient; keep credentials and pairing tokens out of recordings.
+- [ ] Reset to $38 / $60 and forward the $55 dinner invitation from the real phone.
+- [ ] Confirm a grounded $17 category shortfall; request exactly $20 from Clothing to Dining, inspect the proposal, approve, and observe $58 / $40 in the app.
+- [ ] Confirm no allocation change before approval and exactly one adjustment afterward.
+- [ ] Rehearse cancellation, changed amount, duplicate delivery, expired/stale approval, and provider failure in the selected mode.
+- [ ] Verify SMS failure after a committed change does not imply rollback or cause another transfer on retry.
+- [ ] Repeat from reset and record evidence, date, mode, and owner for remaining failures.
 
-**Completion gate:** Both sides can implement against documented interfaces and fixtures without guessing. Your teammate can begin the conversation integration against those fixtures while you complete Phases 2–4.
+### Do not mix the two command modes
 
-### Phase 2 — Build a deterministic financial foundation
+- **Claude mode:** free-form conversation; `KEEP` asks to keep the plan by moving budget, `ALT` explores cheaper alternatives; exact `YES` approves the pending action. Pending actions normally expire after 30 minutes; uncertain submitted purchases remain reconcilable.
+- **Scripted mode:** `DINNER` or the supported $55 invitation proposes the fixed $20 move; exact `YES <code>` confirms within five minutes. `CANCEL` **or `KEEP` cancels**. This is a deterministic fallback, not a natural-language agent demo.
 
-**Owner:** You. **Dependency:** Phase 1 identity and data contract.
+**Completion gate:** real handset receipt/reply plus the current Claude/shared-backend/UI chain works repeatedly. Provider `accepted` status alone does not establish handset delivery.
 
-- [ ] Create the Supabase schema and migrations: user-scoped category budgets, categorized transactions, transfer proposals, and adjustment history. There is no Supabase implementation in the current app yet.
-- [ ] Add an authenticated demo identity and map it to the agreed agent user. The current fictional browser-local profile is display data, not authentication.
-- [ ] Store money in integer cents. Derive period spending from a documented set of transactions and calculate `remaining = allocation − spent` consistently for the frontend and agent.
-- [ ] Define period boundaries and treatment of pending transactions, refunds, and excluded records so imports and UI totals agree.
-- [ ] Seed dining at **$120 allocated / $82 spent / $38 remaining** and shopping at **$150 allocated / $90 spent / $60 remaining**.
-- [ ] Add a repeatable demo reset that restores these figures and clears demo proposals/adjustments without touching unrelated users.
-- [ ] Enforce user-scoped reads and row-level security; keep service credentials server-side.
-- [ ] Establish a transaction import boundary with stable external IDs for deduplication. Connect Nessie if available; otherwise use clearly labeled deterministic fixtures behind the same interface and track the live integration separately.
+## Phase 6 - Demo packaging and submission: pending
 
-**Completion gate:** The financial read interface reliably returns $38 dining remaining and $60 shopping remaining. Resetting restores those exact values, supported by the seeded transaction records.
+- [x] Startup, seed, phone pairing, Android USB, and Claude usage documentation exist.
+- [ ] Update stale README/setup statements and explicitly document the selected demo mode and its approval commands.
+- [ ] Have another teammate start, pair, reset, and reproduce the flow using only the instructions.
+- [ ] Prepare a 60-90-second presentation: invitation -> grounded shortfall -> proposal -> approval -> visible budget/activity update.
+- [ ] Record a complete real-SMS backup video using the final build.
+- [ ] Prepare an architecture slide accurately showing React/Capacitor -> Node/file-backed state -> Nessie, with Claude tools and Bandwidth. Do not depict Supabase or Fetch.ai as integrated.
+- [ ] Confirm organizer deadlines, eligibility, and sponsor-specific assets against current official materials before making prize claims. No eligibility check was performed in this review.
+- [ ] Finish submission links, README/product story, design assets, and limitations.
 
-### Phase 3 — Implement the safe budget action
+**Completion gate:** another teammate can reproduce the demo, a backup exists, and the actual submission requirements are met.
 
-**Owner:** You/shared backend owner agreed in Phase 1. **Dependency:** Phase 2 financial model.
+## Expanded scope - proactive assistance and private groups
 
-- [ ] Implement proposal creation: authorize the user; validate categories, period, currency, and a positive integer-cent amount; record the exact action, expiration, and relevant financial-state versions. Do not change allocations.
-- [ ] Implement confirmation through the authenticated agent integration, with approval evidence tied to the exact proposal and user. Possession of a proposal ID alone is not proof of approval.
-- [ ] In one database transaction, check proposal state and current financial state, validate transferable allocation, update both category limits, mark the proposal executed, and write the audit entry.
-- [ ] Make duplicate confirmation return the original result without another transfer. Ensure concurrent confirmations cannot apply the same action twice or overspend the source allocation.
-- [ ] Reject expired, canceled, unauthorized, or stale proposals. Relevant transaction changes as well as allocation changes must invalidate outdated calculations. Require a fresh proposal and approval after material changes.
-- [ ] Test success, zero/negative/non-integer amounts, same-category transfers, insufficient allocation, unauthorized access, stale/expired/canceled proposals, duplicate confirmation, and concurrent attempts.
+- [x] Claude ALT/search and explicitly approved Nessie sandbox purchase paths are implemented; live end-to-end verification remains open.
+- [x] Foreground location lookup, simulated place buttons, and cooldown-based SMS nudges are implemented; live device/provider verification remains open.
+- [ ] Fetch.ai orchestration is not integrated. Decide whether it is required for the intended submission before adding it.
+- [ ] Social/group budgets and voice are not implemented.
+- [x] Native Android location service exists (foreground service of type location, Pause action, runtime permission, posts to the backend over `adb reverse`). Code review only; screen-off behavior is unverified on the handset.
+- [ ] Screen-off / app-minimized location heads-up verified on the presentation phone. This is the highest-risk open item for the demo.
+- [ ] Push/geofencing infrastructure, native iOS packaging, store release, and real payment rails are not implemented. The notification permission (Android 13+) is not requested, so the Pause notification may be hidden.
 
-**Completion gate:** A direct backend call changes remaining balances to **$58 dining / $40 shopping**, preserves total allocation and spending, and creates exactly one adjustment entry. No bank transaction is created.
+**Scope:** location and cheaper alternatives are now part of the intended product. A limited demo cut may be necessary within 12 hours; this has not yet been agreed with the user. Nessie purchases use sandbox money; budget transfers only change allocations. A category allocation does not establish overall financial affordability. Forwarding is user initiated; the app does not read unrelated private conversations.
 
-### Phase 4 — Complete the smallest useful frontend
+## Proposed 12-hour delivery plan - not yet a committed feature cut
 
-**Owner:** You. **Dependency:** Phase 2 reads and Phase 3 action; UI wiring can begin while the action is built.
+This is a planning budget, not a promise that every new feature fits. Full background tracking, real private groups, onboarding, redesign, and transaction editing are too much to guarantee in one sequential workstream.
 
-- [x] Build the basic React/Vite interface around a shared local financial read model and fictional demo user.
-- [ ] Replace the local adapter with authenticated shared-backend reads and mutations. Add loading, backend-error, and refresh/revalidation behavior at this boundary.
-- [ ] Prioritize the judging screen: dining/shopping allocation, spent, remaining, representative transactions, and recent confirmed adjustments.
-- [ ] Add clear loading, empty, and error states plus a dependable manual refresh action. Automatic revalidation is optional after the first successful integration.
-- [ ] Verify the actual browser/device can reach the backend and that budget changes are readable during the presentation.
-- [ ] Make a transfer directly through the backend, then refresh and verify the new values and adjustment history without running the agent.
-- [ ] Defer extensive category pages and transaction filters until the core flow is reliable.
+1. **Hours 0-2:** validate real-phone dinner SMS, close stale-approval behavior, and make the three decision paths explicit. Confirm the exact group messaging setup. Briefly check native background-location feasibility on the actual handset before committing to it.
+2. **Hours 2-5:** ship a minimal first-run budget setup, persist it to shared state, and implement the final Home/recommendation direction. Keep transaction editing narrow but persistent across Nessie refresh; do not fabricate transaction timestamps missing from source data.
+3. **Hours 5-8:** finish one risky integration: private group planning for the Meta story, or background Android location. Doing both needs a separate available teammate or additional time; no assignment has been assumed.
+4. **Hours 8-12:** stop expanding scope. Test the actual handset and private-member isolation, rehearse/reset repeatedly, record the demo, prepare Figma assets and Devpost submission.
 
-**Completion gate:** The frontend visibly proves the backend action worked, with $58 dining / $40 shopping remaining and one history entry, using live data rather than hardcoded balances. This is the first major integration milestone.
+If Meta is a priority, favor a real small group-planning flow over additional payment/voice integrations. If closed-app proactive behavior is essential to the live pitch, prioritize native location and reduce group scope transparently. Do not present simulated friends or location as live activity.
 
-### Phase 5 — Integrate with your teammate and rehearse failure cases
+### Proposed onboarding
 
-**Owner:** Shared; your teammate retains Claude/Fetch.ai, conversation, and Bandwidth ownership. **Dependency:** Phases 3–4 and teammate's agent wiring.
+- [ ] Name and phone setup; for the one-phone demo, explicitly show the preverified demo phone rather than pretending arbitrary numbers are verified.
+- [ ] Choose Nessie sandbox data or manual setup. Real bank linking is future work unless separately implemented.
+- [ ] Set a weekly/monthly discretionary spending total, savings/protected amounts if applicable, and category allocations. Let Lila suggest an editable split; require confirmation.
+- [ ] Collect useful preferences: cuisines, dietary needs, walking distance, social activities, and optionally financial goals.
+- [ ] Explain and request foreground/background location separately, with pause and quiet-hours controls. Texting remains server-side; do not request SMS inbox access.
+- [ ] Show the personalized Home and a short SMS introduction. Budget/preference changes must affect the same state used by SMS recommendations.
 
-- [ ] Reset the demo and run the full flow on the actual Android phone: forward the $55 invitation → identify the $17 category shortfall → request $20 from shopping → propose → approve → verify SMS, database, and dashboard.
-- [ ] Verify no allocation changes before approval and exactly one change afterward.
-- [ ] Test cancellation, changing the proposed amount, duplicate message delivery, expired/stale approval, and backend/provider failure.
-- [ ] Test database success followed by SMS delivery failure: retrying must recover the committed result without transferring another $20.
-- [ ] Ensure the agent describes what the budget data supports, does not fabricate unavailable figures, and treats the quoted invitation as context rather than action authorization.
-- [ ] Repeat the complete flow from a clean reset and record any remaining failures with an owner.
+### Proposed private group MVP
 
-**Completion gate:** The real-phone flow works repeatedly from a clean reset, and failure cases do not create unintended budget changes.
+- [ ] Host creates an outing with area, time, interests, and an invite link.
+- [ ] Each member joins through an independent private session and supplies preferences and a per-outing comfort limit. It need not expose or connect their entire bank account.
+- [ ] Server filters candidates against everyone's limits; Claude ranks/explains compatible choices using only the minimum necessary shared context.
+- [ ] Shared results show activities, estimated per-person total including relevant fees, and voting/selection. Do not expose member limits, raw financial records, or whose limit rejected a choice.
+- [ ] If nothing fits, suggest free activities or ask for private revisions rather than revealing the limiting member.
+- [ ] Test that one member cannot read another member's private data, including API responses. Hidden UI fields alone are insufficient. Small groups may still infer constraints; do not promise perfect anonymity.
 
-### Phase 6 — Package the demo and submission
+A constrained real group prototype is plausible in the remaining time with dedicated ownership. Production accounts, invitations, all friends linked to banks, group SMS, and robust inference-resistant privacy are a larger project. One phone plus separate laptop browser sessions can demonstrate genuine member participation if the user agrees.
 
-**Owner:** You, with teammate review of agent startup and architecture details. **Dependency:** Phase 5 for final rehearsal and recording; documentation can develop earlier.
+## Sponsor-track reassessment
 
-- [ ] Finish the seed/reset command, startup instructions, implementation-status log, README, and concise architecture slide.
-- [ ] Document frontend/backend configuration, ngrok and Bandwidth callback setup, required environment variable names, and which components are live, sandbox-backed, or fixtures. Do not include secrets or actual phone numbers.
-- [ ] Rehearse a 60–90-second presentation and record a complete successful real-SMS backup.
-- [ ] Verify current prize eligibility, deadlines, and submission requirements against organizer materials before preparing prize-specific assets. Requirements listed later in this document remain unverified planning notes until checked.
-- [ ] Have another teammate start the system, reset it, and reproduce the demo using the documentation.
+Reviewed the two supplied PDFs and the current Devpost listing on October 24, 2026. Fit labels below are engineering/product judgments, not eligibility guarantees. The PDFs are snapshots; current sponsor-specific instructions take precedence where confirmed.
 
-**Completion gate:** The demo is reproducible by another teammate, the backup recording exists, and applicable submission materials are ready.
+### Meta / Bringing People Closer Together with AI - strong direction, incomplete implementation
 
-### Phase 7 — Add one extension after the core demo is reliable
+The guide judges human connection, essential AI integration, originality, and a working demo. Private group planning directly addresses awkward money conversations that keep friends from joining activities. The current personal dinner assistant has a social context but does not yet coordinate a group.
 
-**Owner:** Assign based on the selected feature. **Dependency:** Phase 6 completion and enough time to validate the extension.
+**Gap / solution:** implement a small real group with private limits/preferences, shared recommendations, and a chosen plan. Show an expensive suggestion being replaced by a plan the group likes without revealing whose finances constrained it. The supplied criteria do not state that Llama or another Meta API is mandatory; do not invent that requirement. Confirm any separate eligibility rules with the sponsor.
 
-- [ ] Prefer on-demand cheaper dinner alternatives as the first extension because they continue the same user journey. Use verified merchant information or clearly labeled demo suggestions.
-- [ ] Choose at most one extension based on user value and a confirmed submission target. Social budgets, voice, and payments each need additional state, permissions, and integration work.
-- [ ] Define a small acceptance test before implementation and rerun the core dinner demo after integration.
-- [ ] Keep notifications, geofencing, background location, and unrelated feature expansion outside core scope.
+### Anthropic / Claude for Public Benefit - strong technical fit, sharpen community and evidence
 
-**Completion gate:** The selected extension works end to end, supports the product story, and leaves the core demo reliable. If time is insufficient, ship the completed core flow.
+The guide requires a named community, a lived/researched problem, a usable result, and meaningful Claude use. Claude currently reads budgets and uses approval-guarded actions.
 
----
+**Gap / solution:** choose a specific community the team can honestly speak for (for example, Berkeley students managing a fixed monthly allowance who avoid outings because of cost). Validate with a few real peers and report actual observations. Demonstrate Claude interpreting an invitation and preferences, not just reciting a scripted threshold. Finish onboarding and show graceful refusal when data is unavailable.
 
-## Ownership and division of work
+### Microsoft / Built for the Real World and Customer Impact Award - promising, not production-ready
 
-### You — frontend, financial data, product, integration handoff
+The guide emphasizes customer understanding, measurable usefulness, a path to production, responsible design, and end-to-end functionality. Shared state, audit history, approval checks, and failure tests support that story.
 
-- [x] Build the basic local Pocket interface: dashboard, budgets, category breakdowns, transactions, and budget-adjustment activity.
-- [ ] Connect and verify those screens against the shared financial backend.
-- [ ] Connect the frontend to **Supabase** as the shared source of truth; use a coherent seeded demo user.
-- [ ] Integrate or display **Capital One Nessie** transaction data, with a documented deterministic mock fallback if necessary.
-- [ ] Implement/test budget calculations and the **safe backend operation** that reallocates budget limits between categories.
-- [ ] Provide your teammate with documented read/write interfaces, user mapping, and example responses—without exposing server credentials.
-- [ ] Own Figma/design assets, product story, demonstration fixtures, README contributions, and submission preparation.
-- [ ] Do **not** write Claude prompts, agent orchestration, conversational state, or Bandwidth SMS response logic unless your teammate explicitly hands off part of that work.
+**Gap / solution:** finish onboarding, close the stale-proposal gap, demonstrate privacy boundaries, and measure observed response time / task completion / steps avoided. Do not invent savings or user-impact metrics. Explain the migration from single-process storage to authenticated transactional persistence and a real financial-data connector. The supplied rubric does not state an Azure requirement.
 
-### Teammate — conversational agent and Bandwidth
+### Capital One / Best Use of Nessie - strongest existing integration
 
-- [ ] Connect the Claude/Fetch.ai agent to the already-working Bandwidth inbound/outbound SMS path.
-- [ ] Accept **arbitrary natural-language input**, including pasted/forwarded messages and multi-turn follow-ups; `ALT` and `KEEP` are optional shortcuts, not the interface.
-- [ ] Maintain conversation context, identify user intent, query approved financial tools, generate grounded responses, and clarify ambiguities.
-- [ ] Handle explicit approval before writing a budget change; ensure a confirmation is tied to exactly one pending action.
-- [ ] Send reply SMS, map verified sender to the right app user, handle retries, and prevent duplicate responses/actions.
-- [ ] Handle unavailable data, off-topic requests, provider failures, and unsupported actions gracefully.
+The guide lists completeness, creativity, and complexity. Imported sandbox transactions already drive category balances and decisions; sandbox purchases are also implemented.
 
-### Shared deliverables
+**Gap / solution:** show a real sandbox read changing the shared app and the next SMS response. Preserve imported IDs and user corrections, prevent duplicate manual/imported entries, and demonstrate an understandable reset. Do not imply Nessie accesses the user's real credit-card statement or pays a real restaurant.
 
-- [ ] One canonical demo user ID mapped securely to the verified Android SMS sender.
-- [ ] A stable backend/API contract for fetching financial context and performing approved budget transfers.
-- [ ] A cross-component integration test and a reproducible end-to-end live demo.
-- [ ] A clear implementation-status log: **working / implemented but untested / not yet built**.
+### Visa / Reimagining Shopping - good recommendation fit, incomplete purchase journey
 
----
+The guide weights innovation and experience most heavily, with technical execution, commerce impact, and trust also considered. Contextual cheaper alternatives and preference-aware recommendations align well.
 
-## P0 — Main demo: forward a friend's dinner invitation
+**Gap / solution:** show the full cheaper-option journey: context -> relevant alternatives -> explicit choice -> merchant details/directions. Explain estimated prices and comparison basis. Payment is not stated as mandatory in the supplied rubric; avoid adding a new payment system just for this track.
 
-### User journey (the flow we're building around)
+### Figma / Best Figma Workflow Hack - meaningful existing work, deliverables open
 
-1. A friend texts: **“Dinner tonight? The new place is about $55 per person.”**
-2. The user **copies or forwards** that text to the Pocket SMS conversation: **“Can I afford this?”** Do not claim Pocket can automatically read unrelated private conversations.
-3. The agent retrieves the user's **current dining budget and relevant transaction history**, rather than asking the user to re-enter their finances. Merchant alternatives are an optional Phase 7 extension.
-4. Seeded example: **$38 remains in dining**. The agent explains that a $55 dinner is **$17 over the category's remaining allocation**.
-5. User asks naturally: **“I still want to go. Can I move $20 from shopping?”**
-6. The agent checks shopping's available amount and proposes the transfer without changing anything yet.
-7. The agent asks: **“Move $20 from shopping to dining?”** User replies: **“Yes, do it.”**
-8. The shared backend applies **one confirmed budget allocation change**. Assuming no other transactions, dining remaining becomes **$58**; shopping remaining decreases by **$20**.
-9. The agent replies with a confirmation. The user refreshes or views the frontend, which now shows the updated category budgets and an adjustment history entry.
+Devpost currently names this track Best Figma Workflow Hack. The supplied project notes describe a video up to three minutes, stage logs up to 200 words per stage, required Figma Slides, and embedded working prototypes/Make files. The linked official Google Doc could not be retrieved in this review, so those detailed deliverables remain PDF-backed pending confirmation.
 
-### Your implementation checklist
+**Gap / solution:** use Codex `- Final` designs in the working app, document actual ideation/prototyping/handoff/code-generation stages, provide accessible file/prototype links, and prepare Slides/video. Record real time spent and outcomes rather than reconstructing invented metrics. Design-only polish does not substitute for the workflow evidence.
 
-- [ ] Seed a stable user with **$38 dining remaining** and **$60 shopping remaining**.
-- [ ] Show live category `limit`, `spent`, and `remaining` values from the canonical data source.
-- [ ] Implement the safe budget-reallocation backend operation and audit record (or coordinate implementation ownership if your teammate is writing the endpoint).
-- [ ] Ensure transfers modify **category allocations**, not bank transactions or actual cash transfers.
-- [ ] Make the frontend show the confirmed updated balances and adjustment history after refresh/revalidation.
-- [ ] Provide the teammate with budget lookup and transfer test fixtures; document realistic failure cases.
-- [ ] Test the UI with a budget update made directly through the agreed backend before the AI agent is connected.
-- [ ] Make demo values, backend values, and the SMS script mathematically consistent.
+### Fetch.ai / ASI:One Agent Challenge - currently missing mandatory integration
 
-### Teammate dependency (track; do not implement)
+The official hackpack requires Agentverse registration, Agent Chat Protocol, discovery/direct use through ASI:One, meaningful tool execution, and the complete primary workflow inside ASI:One. It also calls for a public GitHub repo, Devpost plus the ASI:One submission agent, and demo materials. A Claude agent behind SMS is not sufficient.
 
-- [ ] Interpret the quoted invite as **context**, not as an instruction to transfer money.
-- [ ] Understand follow-ups such as “What if I use shopping?”, “Actually, only $10,” “Never mind,” or “Yes, do it.”
-- [ ] Read the correct live user budgets before answering and before executing any transfer.
-- [ ] Ask confirmation for a specific amount/from/to transfer, then execute it once.
-- [ ] Send a natural SMS answer and maintain context across messages.
+**Gap / solution:** a separate teammate could expose the same budget read/propose/confirm operations through an ACP-compatible registered agent, with safe demo identity and approval binding, and prove the flow inside ASI:One. This adds another conversation surface and is a substantial diversion from the user's SMS-first priority. Defer unless someone owns it. The sponsor site and Devpost disagree on prize amounts; do not optimize scope around an unconfirmed amount.
 
-**Acceptance test:** On the actual Android phone, a forwarded invitation leads to an accurate answer; a follow-up requests a $20 reallocation; explicit approval updates the database **and the visible dashboard**, and the agent confirms the change.
+### Cartesia / Best Use of Cartesia - poor fit with SMS-first scope
 
----
+The supplied guide explicitly makes voice central to the product and requests a working demo, two-minute demo-first presentation, README, and source access.
 
-## P0 — Financial data and backend (your highest-leverage work)
+**Gap / solution:** an actual spoken budgeting interaction using Cartesia would be needed. Decorative speech or friend recordings without Cartesia do not close the gap. Recommend deferring within this 12-hour window.
 
-### Supabase
+### Coinbase / Best Use of x402 - no qualifying integration yet
 
-- [ ] Inspect existing schema and code; don't rebuild working functionality.
-- [ ] Define/stabilize records for users, budgets, transactions, and budget adjustments. Use real existing table names in code; proposed names below are not schema claims.
-- [ ] Ensure every budget and transaction belongs to a stable `user_id`.
-- [ ] Store money in integer cents; derive period spending from the agreed transaction set and `remaining = allocation − spent` in the shared read model.
-- [ ] Enforce row-level security for client-facing user data.
-- [ ] Keep admin/service-role credentials **server-side** and out of the client and repo.
-- [ ] Provide a seed/reset script that recreates the demo figures reproducibly.
-- [ ] Implement an atomic, validated, idempotent budget transfer with an audit trail. Reject zero/negative/non-integer-cent amounts, same-category transfers, insufficient transferable allocation, expired/canceled/stale confirmations, and unauthorized access.
-- [ ] Refresh/revalidate data after a transfer so the frontend displays updated numbers promptly.
+The project notes describe Coinbase MCP/x402 payment-agent work; the linked detailed brief could not be retrieved. Nessie sandbox purchases and category reallocations are not x402 usage.
 
-### Capital One Nessie and transaction logic
+**Gap / solution:** a real x402-authorized agent transaction with limits, explicit approval, and receipt would be needed, subject to confirming the exact track rules. It should solve a credible commerce problem, not just be attached to the demo. Recommend deferring.
 
-- [ ] Verify Nessie account and transaction data mapping (merchant, amount, date, category, user).
-- [ ] Import or query realistic transaction history without creating duplicates.
-- [ ] Categorize transactions for dining, shopping, groceries, and other relevant categories.
-- [ ] Confirm sample balances are calculated from actual seeded budget/transaction values.
-- [ ] Provide a clearly identified deterministic fallback if the sandbox is unstable during the live demo.
-- [ ] Distinguish **mock banking data**, **budget reallocation**, and **real payments** in both UI and documentation.
+**Recommended focus:** Nessie, Anthropic, Microsoft; Meta if the private group feature works; Visa and Figma through the same polished user journey and documented workflow. Defer new Fetch.ai, Cartesia, and Coinbase integrations unless a teammate already has substantial working code.
 
-### Proposed shared data structures
+## External evidence checked
 
-| Record / capability | Minimum useful information | Ownership |
-| --- | --- | --- |
-| User profile | `user_id`, authorized phone mapping, preferences | Shared backend |
-| Budget | user, category, period, limit, spent, remaining | Your data layer |
-| Transaction | external ID, user, merchant, amount, date, category | Your data layer |
-| Budget adjustment | action ID, user, from/to category, amount, confirmation, timestamp | Shared validated backend |
-| Transfer proposal | user, immutable from/to/amount/period, expiration, financial-state versions, status, approval reference | Shared validated backend |
-| Conversation | user, conversation context, current proposal ID, approval message reference | Teammate |
+- [Current Devpost listing](https://cal-hacks-13-0.devpost.com/): deadline banner is October 25, 2026, 9:00 AM PDT; project image, repository, and demo required. Current listing says three-minute pitch plus two-minute questions; the PDF recommends two minutes. Prepare a two-minute core with an optional third minute. Confirm any organizer updates before submission.
+- [Fetch.ai official hackpack](https://www.fetch.ai/events/hackathons/calhacks-13-0/hackpack): exact integration and submission requirements.
+- [Bandwidth trial limits](https://dev.bandwidth.com/docs/messaging/build-free-trial/): one verified recipient, SMS only, six messages/minute and 200/day. Direct participation in a friends' group thread is not supported by this demo setup. Forwarding privately and manually sharing the chosen plan is viable.
+- [Android background location](https://developer.android.com/develop/sensors-and-location/location/background) and [permission flow](https://developer.android.com/develop/sensors-and-location/location/permissions/background): native handling, permissions, and update limits matter. Current browser geolocation cannot meet closed-app tracking. Test screen-off and background behavior on the actual handset; do not promise operation after force-stop or with no connectivity.
+- [Plaid Transactions](https://plaid.com/docs/transactions/): a consented real-bank connector can supply credit/depository transaction data, but typical updates are one to four times daily, not guaranteed instant purchase detection. Nessie remains the present sandbox source.
 
----
+## Review sources
 
-## P0 — Agent integration contract (provide, don't build agent)
-
-**Write `docs/agent-integration-contract.md` with the actual routes or server functions, not just these examples.** Decide with your teammate who implements the shared backend wrappers.
-
-| Tool / operation (suggested name) | Purpose | Safety requirement |
-| --- | --- | --- |
-| `get_user_financial_context(user_id)` | Retrieve category budgets and recent categorized transactions | Authorized user only; read-only |
-| `get_budget(user_id, category)` | Retrieve current category allocation and remaining amount | Correct period and source of truth |
-| `get_recent_transactions(user_id, filters)` | Ground explanations in transaction history | Limit exposure and avoid duplicate records |
-| `propose_budget_transfer(user_id, from, to, amount)` | Validate the requested reallocation without applying it | Return a specific pending-action ID and expected results |
-| `confirm_budget_transfer(user_id, pending_action_id, approval_reference)` | Apply an explicitly approved action | Authenticated approval bound to user/proposal; atomic, single-use, idempotent |
-| `cancel_budget_transfer(user_id, pending_action_id)` | Invalidate a pending proposal | Authorized user only; canceled proposals cannot execute |
-| `list_budget_adjustments(user_id)` | Show visible proof of a confirmed change | User-scoped read access |
-
-### Example response to agent (illustrative only)
-
-```json
-{
-  "user_id": "demo-user-1",
-  "budget_period": "2026-10",
-  "currency": "USD",
-  "categories": [
-    {"category": "dining", "limit_cents": 12000, "spent_cents": 8200, "remaining_cents": 3800},
-    {"category": "shopping", "limit_cents": 15000, "spent_cents": 9000, "remaining_cents": 6000}
-  ]
-}
-```
-
-After **confirmed** $20 shopping → dining reallocation, category limits change; the dining remaining amount becomes **$58** and shopping remaining becomes **$40**, assuming spent amounts do not change. **Do not create a fake bank payment.**
-
-### Integration questions to settle with your teammate
-
-- [ ] How does the Bandwidth inbound sender map to the same `user_id` as the frontend?
-- [ ] Which actual endpoint/function returns current budgets and transaction summaries?
-- [ ] Who implements the validated budget transfer, and how is user approval represented?
-- [ ] How does the frontend detect/reload agent-initiated changes?
-- [ ] What happens if the agent proposes a transfer using outdated budget information?
-- [ ] What errors should tools return for an unknown user, insufficient budget, expired approval, or provider failure?
-- [ ] How do we keep sensitive tokens, actual phone numbers, and service keys out of demo artifacts and Git?
-- [ ] Who keeps the live ngrok tunnel and Bandwidth callback URL correct for demo time?
-
-**Handoff definition of done:** Your teammate can call the agreed tools to fetch a demo user's real budget, request an approved transfer, and see the correct result in the same frontend you demo.
-
----
-
-## Frontend scope — P0 demo screen, P1 expanded browsing
-
-> The React/Vite frontend now works with browser-local demo data. Keep it and replace the persistence boundary when connecting Supabase. Local UI functionality is implemented; shared-backend acceptance below is still pending.
-
-- [ ] Budget dashboard: total budget, category breakdown, spent, remaining, and spending progress.
-- [ ] P0: Show category allocations, representative transactions, and recent adjustments on the demo screen. Separate category detail pages are P1.
-- [ ] P0: Show transaction merchant, amount, date, and category. Full history browsing and filters are P1.
-- [ ] Recent activity: confirmed transfers and their effects on category limits.
-- [ ] Clear loading, empty, error, and demo reset states.
-- [ ] Ensure the visible user matches the user associated with the test SMS sender.
-- [ ] Verify the browser/device can access backend URLs; avoid pointing a physical phone to laptop-local `localhost`.
-- [ ] Make the demo visually polished enough to read budget changes at a glance.
-- [ ] Test the actual presentation setup (laptop/browser or phone, whichever you plan to show).
-
-**Acceptance:** Without running the language model, a teammate can change the demo user's budget via the shared backend and your frontend shows the correct result on refresh.
-
----
-
-## P0 — Full integration tests (you + teammate)
-
-| Test | Expected behavior | Main owner |
-| --- | --- | --- |
-| Baseline SMS | Real Android inbound webhook arrives through Bandwidth → ngrok | Teammate (already demonstrated at webhook level) |
-| Free-form question | Agent answers “How much can I spend on dinner?” using real data | Teammate + your tools |
-| Forwarded $55 invitation | Correctly compares $55 against $38 dining remaining; reports $17 shortfall | Shared |
-| Clarification / follow-up | Understands “Can I move $20 from shopping?” without restarting context | Teammate |
-| Transfer proposal | Shows validated $20 shopping → dining proposal; no write yet | Shared |
-| Confirmation | “Yes, do it” applies **exactly one** change | Shared |
-| UI verification | Dining remaining $58 and shopping remaining $40, reflected in frontend | You |
-| Cancellation | “Never mind” results in no write | Teammate |
-| Duplicate incoming SMS | No repeated transfer or duplicate actions | Teammate + shared backend |
-| Changed amount | Old proposal cannot execute; replacement requires fresh approval | Shared |
-| Expired/stale approval | No write; fresh proposal and approval required | Shared |
-| Concurrent confirmation | One committed action and one audit entry | Shared backend |
-| SMS failure after commit | Retry returns committed result without another transfer | Shared |
-| Unrecognized / off-topic text | Helpful, safe clarification or honest limitation | Teammate |
-| Backend/provider outage | Useful error, no fabricated financial numbers, recoverable demo | Shared |
-
----
-
-## P1 — Additional capabilities aligned to the prize goals
-
-These support the broader Pocket vision but **must not delay the core dinner-invite SMS flow**.
-
-### Social/group budgets — Meta
-
-- [ ] Allow friends to opt in to a shared dining or outing budget.
-- [ ] Let a group plan an affordable dinner and track shared spending against a goal.
-- [ ] Keep individual personal budgets private unless explicitly shared.
-- [ ] Let users record a short encouraging audio message for friends, with clear consent and playback controls.
-- [ ] Explore contextual encouragement within the app or conversation, **not dependent on automatic push notifications**.
-
-### Merchant suggestions and shopping — Visa
-
-- [ ] Add an **on-demand** question such as “What could we eat near campus for less than $20?”
-- [ ] Return verified or clearly marked demo merchant suggestions; disclose unavailable live prices.
-- [ ] Explain affordability in terms of the user's remaining budget, not generic spending advice.
-
-### Voice — Cartesia
-
-- [ ] If targeting Cartesia, build a meaningful spoken financial interaction or friend-voice experience instead of a decorative voice sample.
-- [ ] Preserve transcript/context and protect any recorded voice or likeness with explicit consent.
-- [ ] Document voice contribution, limitations, and the requested demo/README artifacts.
-
-### Agentic payments — Coinbase x402 (stretch)
-
-- [ ] Explore approved payment flows **only after** the budget demo is reliable.
-- [ ] Require explicit authorization immediately before each transaction; display amount, recipient, and fees.
-- [ ] Use sandbox/demo rails where possible; never equate a budget allocation change with real payment.
-
-### Optional location awareness (not core, no notification requirement)
-
-- [ ] If time remains, allow the user to **ask** Pocket about nearby affordable merchants or manually select a location.
-- [ ] A spending heatmap may be added later if grounded location/transaction data is available and privacy controls are appropriate.
-- [ ] Defer automatic location monitoring, geofencing, and background notification delivery unless deliberately reprioritized.
-
-### Prize / submission mapping
-
-These are planning targets, not verified eligibility or current organizer requirements. Confirm them during Phase 6 before claiming a prize integration or preparing specific assets.
-
-| Prize | Pocket angle | Relative priority |
-| --- | --- | --- |
-| Anthropic | Claude reasons over real user budget data and natural-language social plans | P0 agent story |
-| Microsoft finance agent / customer impact | Complete useful finance flow with safe, auditable decisions | P0 |
-| Fetch.ai | Actual agent orchestration of financial tools and approved actions | Teammate P0 |
-| Capital One Nessie | Transaction-backed budgets and responsible presentation of mock financial data | Your P0 |
-| Visa | On-demand affordable alternatives before purchase | P1 |
-| Meta | Opt-in social budgets and supportive recorded messages | P1 |
-| Cartesia | Voice-forward interaction with tangible user benefit | P1 |
-| Coinbase x402 | Permission-gated commerce/payment agent | Stretch |
-| Figma | Design workflow, prototype, Slides, stage log, appropriate submission assets | P1 / submission |
-
----
-
-## P0 — Demo and submission preparation
-
-- [ ] Rehearse the main dinner flow on the actual phone and frontend used for judging.
-- [ ] Prepare a **60–90-second demo**: friend invitation → forward to Pocket → personalized financial response → approval → visible app update.
-- [ ] Record a backup video of a complete **real SMS** interaction.
-- [ ] Provide a reproducible seed/reset process and startup instructions for the backend and ngrok.
-- [ ] Write a README covering target users, problem, product, architecture, setup, technical stack, sample flow, limitations, and privacy/safety.
-- [ ] Make a clear architecture slide separating **frontend/Supabase/Nessie** from **Claude/Fetch.ai/Bandwidth**.
-- [ ] Document which parts are real, sandbox-backed, and demo fixtures.
-- [ ] Confirm current prize deadlines, eligibility, and submission materials from organizers.
-- [ ] If submitting to Figma, verify the listed planning requirements (demo video up to 3 minutes, stage log up to 200 words per stage, Figma Slides, and applicable prototypes/files) against current organizer materials, then prepare the confirmed assets.
-- [ ] If submitting to Cartesia, verify the listed planning requirements (2-minute demo-first presentation, README, and source access), then prepare the confirmed assets only if voice is integrated.
-
----
-
-## Build coordination
-
-Use the phased execution plan above as the authoritative build order. The domain checklists provide supporting detail, not additional work that must all happen before the first demo.
-
-Your teammate can build conversation behavior against the Phase 1 fixtures while you complete data, transfer logic, and frontend integration. First prove **backend → frontend** without the agent; then prove **SMS → agent → backend → frontend** together. Keep optional browsing, live merchant suggestions, and prize extensions behind the core demo completion gates.
-
-## Minimum viable demo checklist
-
-- [ ] Pocket frontend shows coherent, accurate budget and transaction data for the demo user.
-- [ ] User can forward/copy a friend's $55 dinner invite to Pocket over SMS.
-- [ ] Teammate's agent uses stored data to calculate whether the invite fits the remaining $38 dining budget.
-- [ ] Natural-language follow-up requests a $20 shopping → dining budget transfer.
-- [ ] Agent asks explicit approval, and the backend applies exactly one validated change.
-- [ ] The frontend shows dining remaining $58 and shopping remaining $40.
-- [ ] Successful end-to-end flow is reproducible and captured on a backup video.
-
-## Known versus not yet verified
-
-**Previously reported live verification:** Bandwidth outbound SMS, real Android inbound webhook via ngrok, and 204 simulated callbacks. No real SMS was sent during the app build.
-
-**Verified during local development:** The 12 budget logic tests and nine callback subtests pass (Node reports 22 including the callback parent test). The React/Vite production build succeeds. Desktop/mobile browser checks cover transfer review/cancel/confirm, correct balances, reload persistence, activity history, merchant search, category filtering, empty results, expense recalculation, insufficient-budget errors, dialog dismissal, and reset. All four screens were checked at 390px, 768px, and 1440px with no horizontal overflow. No browser console errors were observed. See the README for local startup and demo steps.
-
-**Not connected/built in this app yet:** Data-driven conversational agent replies, Supabase integration, Nessie transaction imports, authenticated server-side budget transfers, SMS-to-dashboard updates, group budgets, voice, payments, and final submission artifacts.
-
-**Final division of responsibilities:** **You: frontend, Supabase/Nessie, budget logic, tool handoff, demo.** **Teammate: Claude/Fetch.ai agent, conversation memory, Bandwidth connection, natural-language SMS replies.** Automatic notifications and geofencing are **out of core scope**.
+Implementation: `src/App.jsx`, `src/lib/store.js`, `src/lib/budget.js`, `server/index.mjs`, `server/agent.mjs`, `server/conversation.mjs`, `server/nessie.mjs`, the local/server test suites, `capacitor.config.json`, and Android project files. Setup and prior verification: [README](README.md), [phone rehearsal](docs/phone-demo.md), [Claude agent](docs/claude-agent.md), [Android setup](docs/android-usb.md).

@@ -4,13 +4,20 @@ export const CATEGORIES = [
   { id: 'dining', name: 'Dining', icon: 'dining', color: '#7f5679', tint: '#f2eaf2', description: 'Good food, good company' },
   { id: 'shopping', name: 'Clothing', icon: 'bag', color: '#ad7ca6', tint: '#f2eaf2', description: 'A few things just for you' },
   { id: 'transport', name: 'Transportation', icon: 'train', color: '#cf93c7', tint: '#f2eaf2', description: 'Places to be, people to see' },
-  { id: 'groceries', name: 'Groceries', icon: 'basket', color: '#f2ace8', tint: '#f2eaf2', description: 'The everyday essentials' },
+  { id: 'groceries', name: 'Groceries', icon: 'basket', color: '#b985b0', tint: '#f2eaf2', description: 'The everyday essentials' },
+  { id: 'social', name: 'Social', icon: 'user', color: '#f2ace8', tint: '#f2eaf2', description: 'Plans with your people' },
 ];
 
 export function createSeed() {
   return {
     schemaVersion: 1, revision: 0, userId: 'pocket-demo', period: PERIOD, currency: 'USD',
-    budgets: { dining: 12000, shopping: 15000, groceries: 22000, transport: 16000 },
+    budgets: { dining: 12000, shopping: 15000, groceries: 22000, transport: 16000, social: 16000 },
+    // Today's plans, shown on Home. Amounts are what the user expects to spend on each.
+    plans: [
+      { id: 'plan-1', title: 'Brunch with Landon', detail: 'Early Morning · La Note', amountCents: 2200 },
+      { id: 'plan-2', title: 'Uber to Tennis', detail: 'Afternoon · Channing Courts', amountCents: 1000 },
+      { id: 'plan-3', title: 'Dinner at home', detail: 'Evening · Home', amountCents: 500 },
+    ],
     transactions: [
       { id: 't01', merchant: 'Sweetgreen', category: 'dining', amountCents: 1850, date: '2026-10-23' },
       { id: 't02', merchant: "Trader Joe’s", category: 'groceries', amountCents: 3650, date: '2026-10-22' },
@@ -24,6 +31,9 @@ export function createSeed() {
       { id: 't10', merchant: 'Gather', category: 'dining', amountCents: 3500, date: '2026-10-10' },
       { id: 't11', merchant: 'Thrift store', category: 'shopping', amountCents: 1800, date: '2026-10-08' },
       { id: 't12', merchant: 'BART', category: 'transport', amountCents: 1950, date: '2026-10-05' },
+      { id: 't13', merchant: 'Starline Bowl', category: 'social', amountCents: 2400, date: '2026-10-21' },
+      { id: 't14', merchant: 'Sightline Cinema', category: 'social', amountCents: 1600, date: '2026-10-19' },
+      { id: 't15', merchant: 'Club Fox', category: 'social', amountCents: 2000, date: '2026-10-14' },
     ],
     adjustments: [],
   };

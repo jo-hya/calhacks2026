@@ -1,5 +1,7 @@
+import { SMS_MAX_CHARS } from './sms-text.mjs';
+
 export async function sendSMS(text) {
-  if (text.length > 129 || /[^\x20-\x7E]/.test(text)) throw new Error('Reply exceeds Bandwidth trial SMS limits.');
+  if (text.length > SMS_MAX_CHARS || /[^\x20-\x7E]/.test(text)) throw new Error('Reply exceeds Bandwidth trial SMS limits.');
   const env = process.env;
   const credentials = Buffer.from(`${env.BANDWIDTH_CLIENT_ID}:${env.BANDWIDTH_CLIENT_SECRET}`).toString('base64');
   const auth = await fetch('https://api.bandwidth.com/api/v1/oauth2/token', { method: 'POST', headers: { Authorization: `Basic ${credentials}`, 'Content-Type': 'application/x-www-form-urlencoded' }, body: 'grant_type=client_credentials', signal: AbortSignal.timeout(10000) });

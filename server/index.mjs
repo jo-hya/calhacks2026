@@ -10,11 +10,14 @@ import { sendSMS } from './bandwidth.mjs';
 import { runAgent } from './agent.mjs';
 import { splitSms } from './sms-text.mjs';
 import { lookupPlace } from './place.mjs';
+import { geocodePlace, locatePlaces } from './geocode.mjs';
+import { updateProfile, editExpense, DEFAULT_PROFILE } from '../src/lib/preferences.js';
 import { createVoice } from './voice.mjs';
 import { createMemoryIndex, memoryDoc, transactionDoc } from './memory.mjs';
 
 const PENDING_TTL_MS = 30 * 60 * 1000;
 const NUDGE_COOLDOWN_MS = 20 * 60 * 1000;
+const DEMO_ARRIVAL = { place: 'Gather', category: 'dining', lat: 37.8697, lng: -122.2668, city: 'Berkeley', region: 'California' };
 const MAX_HISTORY = 24;
 const MAX_AUDIO_BYTES = 5 * 1024 * 1024;
 const MAX_MEMORIES = 50;
@@ -25,14 +28,17 @@ const indexDocs = data => [...data.memories.map(memoryDoc), ...data.state.transa
 // `agent` is the Claude agent (on when ANTHROPIC_API_KEY is set); without it the scripted
 // responder in conversation.mjs answers, as before.
 export function createDemoServer({ file = '.pocket/state.json', sync = syncNessie, send = sendSMS, env = process.env, initial, token = randomBytes(24).toString('hex'),
-  agent = env.ANTHROPIC_API_KEY ? runAgent : null, pay = createAgentPurchase, clearAgentPurchases = deleteAgentPurchases, locate = lookupPlace,
+  agent = env.ANTHROPIC_API_KEY ? runAgent : null, pay = createAgentPurchase, clearAgentPurchases = deleteAgentPurchases, locate = lookupPlace, geocode = geocodePlace,
   voice = createVoice({ env }), memoryIndex = createMemoryIndex({ env }) } = {}) {
   mkdirSync(resolve(file, '..'), { recursive: true });
   let data = initial || (existsSync(file) ? JSON.parse(readFileSync(file, 'utf8')) : { state: createSeed(), proposals: {}, messages: [], inbox: {}, outbox: [] });
   data = { ...data, agent: data.agent || { pending: null, history: [] }, memories: data.memories || [] };
+  // Saved demos from before a category existed get its seed budget and plans.
+  data = { ...data, state: { ...data.state, budgets: { ...createSeed().budgets, ...data.state.budgets }, plans: data.state.plans ?? createSeed().plans } };
   // Search covers what the user told Lila plus their purchases.
   memoryIndex.sync(indexDocs(data));
   const lastNudge = new Map();
+  const paying = new Set();
   let queue = Promise.resolve();
   let syncWarning = '';
   const serial = fn => { const result = queue.then(fn); queue = result.catch(() => {}); return result; };
@@ -55,15 +61,54 @@ export function createDemoServer({ file = '.pocket/state.json', sync = syncNessi
 
   // How the Claude agent reads and changes the shared data. Every change runs in `serial`,
   // but Claude's thinking happens outside it, so the app stays responsive during a turn.
+  // Budget moves and profile changes the user asks for by text apply at once. The last one is
+  // kept so a later "undo" can reverse it, as long as the budgets still match what it produced.
+  const changeKey = state => JSON.stringify([state.budgets, state.profile?.name, state.profile?.area, state.profile?.preferences]);
+  const saveChange = (state, undo) => save({ ...data, state, agent: { ...data.agent, lastChange: { undo, after: changeKey(state) } } });
   const ops = {
     state: () => data.state,
+    updateProfile: input => serial(() => { save({ ...data, state: updateProfile(data.state, input) }); return data.state.profile; }),
+    moveBudget: ({ from, to, amountCents }) => serial(() => {
+      const before = data.state;
+      const state = confirmTransfer(before, { id: `move-${randomBytes(4).toString('hex')}`, from, to, amountCents, revision: before.revision, expiresAt: Date.now() + 60 * 1000 });
+      saveChange(state, { kind: 'transfer', from: to, to: from, amountCents });
+    }),
+    updateProfileNow: input => serial(() => {
+      const profile = { ...DEFAULT_PROFILE, ...data.state.profile };
+      const previous = { name: profile.name, area: profile.area, preferences: profile.preferences, budgets: { ...data.state.budgets } };
+      saveChange(updateProfile(data.state, { ...input, onboarded: true }), { kind: 'profile', input: previous });
+    }),
+    undoLast: () => serial(() => {
+      const last = data.agent.lastChange;
+      if (!last) throw new Error('There is no recent change to undo.');
+      if (changeKey(data.state) !== last.after) throw new Error('Your budget changed after that, so it can’t be undone automatically. Tell Lila what you want instead.');
+      const { undo } = last;
+      const state = undo.kind === 'transfer'
+        ? confirmTransfer(data.state, { id: `undo-${randomBytes(4).toString('hex')}`, from: undo.from, to: undo.to, amountCents: undo.amountCents, revision: data.state.revision, expiresAt: Date.now() + 60 * 1000 })
+        : updateProfile(data.state, undo.input);
+      save({ ...data, state, agent: { ...data.agent, lastChange: null } });
+    }),
+    recommendations: async items => {
+      const places = await locatePlaces(items, geocode);
+      return serial(() => { save({ ...data, state: { ...data.state, recommendations: places, recommendationsAt: new Date().toISOString() } }); });
+    },
     pending: livePending,
     history: () => data.agent.history,
     setPending: action => serial(() => {
       if (data.agent.pending?.attempted) throw new Error('Check the previous payment with YES before proposing another action; its outcome is uncertain.');
       // Validate up front so the agent can't ask the user to approve something impossible.
       if (action.kind === 'transfer') proposeTransfer(data.state, { ...action, id: 'check' });
-      const pending = { ...action, id: `act-${randomBytes(4).toString('hex')}`, expiresAt: Date.now() + PENDING_TTL_MS };
+      if (action.kind === 'edit') editExpense(data.state, action.expense);
+      if (action.kind === 'expense') addExpense(data.state, { ...action.expense, id: 'check' });
+      if (action.kind === 'profile') updateProfile(data.state, action.input);
+      const pending = {
+        ...action,
+        id: `act-${randomBytes(4).toString('hex')}`,
+        // Keep the exact financial revision that the user is being asked to approve.
+        // Approval must be renewed when transactions or allocations change.
+        revision: data.state.revision,
+        expiresAt: Date.now() + PENDING_TTL_MS,
+      };
       saveAgent({ pending });
       return pending;
     }),
@@ -99,17 +144,31 @@ export function createDemoServer({ file = '.pocket/state.json', sync = syncNessi
       const action = await serial(() => {
         const p = livePending();
         if (!p || p.id !== id) throw new Error('That action is no longer pending.');
-        if (p.kind === 'transfer') {
-          const proposal = proposeTransfer(data.state, { ...p, id: p.id });
-          save({ ...data, state: confirmTransfer(data.state, proposal), agent: { ...data.agent, pending: null } });
-        } else saveAgent({ pending: { ...p, attempted: true } });
+        // Approval applies to the budget revision it was proposed on. A purchase is re-checked too,
+        // unless this is a retry after a failed payment (the retry only looks for the original purchase).
+        const checked = ['transfer', 'edit', 'expense', 'profile'].includes(p.kind) || (p.kind === 'purchase' && !p.attempted);
+        if (checked && p.revision !== data.state.revision) {
+          throw new Error('Your budget changed since this review. Ask Lila for a fresh proposal before approving it.');
+        }
+        if (p.kind === 'purchase') saveAgent({ pending: { ...p, attempted: true } });
+        else {
+          const state = p.kind === 'transfer' ? confirmTransfer(data.state, proposeTransfer(data.state, { ...p, id: p.id }))
+            : p.kind === 'edit' ? editExpense(data.state, p.expense)
+            : p.kind === 'profile' ? updateProfile(data.state, p.input)
+            : addExpense(data.state, { ...p.expense, id: p.id, source: 'manual' });
+          save({ ...data, state, agent: { ...data.agent, pending: null } });
+        }
         return { ...p, reconcileOnly: Boolean(p.attempted) };
       });
       if (action.kind !== 'purchase') return;
       // An approved ALT: pay through Nessie, then import it like any other purchase.
       // Persist the attempt before contacting Nessie. After a timeout or restart,
       // retry only looks up this action's purchase; it must never submit it again.
-      await pay({ ...action, date: DEMO_DATE });
+      // Two approvals that arrive together must not both reach Nessie.
+      if (paying.has(id)) throw new Error('That payment is already being processed. Check the app before trying again.');
+      paying.add(id);
+      try { await pay({ ...action, date: DEMO_DATE }); }
+      finally { paying.delete(id); }
       await serial(() => { if (data.agent.pending?.id === id) saveAgent({ pending: null }); });
       await serial(refresh);
     },
@@ -209,6 +268,15 @@ export function createDemoServer({ file = '.pocket/state.json', sync = syncNessi
         }
         // Await first: the view must reflect what the turn changed.
         if (url.pathname === '/api/location') { const result = await nudge(input); return json(200, { ...view(), location: result }); }
+        if (url.pathname === '/api/demo-arrival') {
+          // Presentation shortcut: act as if the phone just reported arriving at the demo
+          // restaurant. The delay leaves time to lock the phone so the text lands while
+          // Lila is closed. Everything after the location fix (agent, SMS) is the real path.
+          const delaySeconds = Math.min(60, Math.max(0, Number(input.delaySeconds) || 0));
+          lastNudge.delete(DEMO_ARRIVAL.place);
+          setTimeout(() => nudge(DEMO_ARRIVAL).then(r => console.log('Demo arrival:', r.sent ? 'texted' : r.reason)).catch(e => console.error('Demo arrival failed:', e.message)), delaySeconds * 1000);
+          return json(200, { ...view(), scheduledInSeconds: delaySeconds });
+        }
         if (url.pathname === '/api/voice/ask') {
           // A typed or tapped question (e.g. a starter prompt) answered like a spoken one.
           if (typeof input.text !== 'string' || !input.text.trim() || input.text.length > 1000) throw new Error('Invalid message.');
@@ -238,9 +306,12 @@ export function createDemoServer({ file = '.pocket/state.json', sync = syncNessi
             if (env.NESSIE_API_KEY) await clearAgentPurchases();
             const state = await sync(createSeed());
             // Keep processed SMS IDs and outbox so delayed callbacks cannot replay actions.
-            save({ ...data, state: { ...state, revision: data.state.revision + 1 }, proposals: {}, messages: [], agent: { pending: null, history: [] }, memories: [] });
+            // Keep who the user is (onboarding/preferences); budgets and spending return to the seed.
+            save({ ...data, state: { ...state, profile: data.state.profile, revision: data.state.revision + 1 }, proposals: {}, messages: [], agent: { pending: null, history: [] }, memories: [] });
             lastNudge.clear();
           } else if (url.pathname === '/api/expense') save({ ...data, state: addExpense(data.state, { ...input, source: 'manual' }) });
+          else if (url.pathname === '/api/expense/edit') save({ ...data, state: editExpense(data.state, input) });
+          else if (url.pathname === '/api/profile') save({ ...data, state: updateProfile(data.state, input) });
           else if (url.pathname === '/api/proposal') {
             const p = proposeTransfer(data.state, input);
             save({ ...data, proposals: { ...data.proposals, [p.id]: p } });
@@ -268,19 +339,22 @@ export function createDemoServer({ file = '.pocket/state.json', sync = syncNessi
   // decides whether a heads-up text is worth sending. `place`/`category` skip the lookup
   // (the demo's "pretend I'm at" buttons send them).
   async function nudge({ lat, lng, place, category, city, region }) {
-    if (!Number.isFinite(lat) || !Number.isFinite(lng)) throw new Error('lat and lng are required.');
+    if (!Number.isFinite(lat) || !Number.isFinite(lng) || Math.abs(lat) > 90 || Math.abs(lng) > 180) throw new Error('A valid location is required.');
+    if (data.state.profile?.locationEnabled === false) return { sent: false, reason: 'Location heads-ups are paused.' };
     if (!agent) return { sent: false, reason: 'The Claude agent is off (no ANTHROPIC_API_KEY).' };
     let where = { place, category, city, region };
     if (!category) {
       try { where = { ...(await locate(lat, lng)), ...(place && { place }) }; }
       catch { return { sent: false, reason: 'Could not look up this location.' }; }
     }
+    await serial(() => save({ ...data, state: { ...data.state, lastLocation: { lat, lng, ...where, updatedAt: new Date().toISOString() } } }));
     if (!where.category) return { sent: false, reason: 'Not a place where you usually spend.', place: where.place };
     const key = where.place || `${lat.toFixed(3)},${lng.toFixed(3)}`;
     if (Date.now() - (lastNudge.get(key) ?? 0) < NUDGE_COOLDOWN_MS) return { sent: false, reason: 'Already nudged here recently.', place: where.place };
     lastNudge.set(key, Date.now());
     let fresh = true;
     try { await serial(refresh); } catch { fresh = false; }
+    if (!fresh) { lastNudge.delete(key); return { sent: false, reason: 'Waiting for a fresh budget.' }; }
     let text;
     try { text = await agent({ ops, trigger: 'location', location: { lat, lng, ...where }, bankFresh: fresh }); }
     catch (error) { console.error('Agent error:', error.message); lastNudge.delete(key); return { sent: false, reason: 'Lila could not reach Claude.' }; }
@@ -288,6 +362,7 @@ export function createDemoServer({ file = '.pocket/state.json', sync = syncNessi
     await log({ who: 'Lila', text, channel: 'sms' });
     await queueTexts(`nudge-${randomBytes(4).toString('hex')}`, text);
     await serial(sendQueued);
+    await serial(() => save({ ...data, state: { ...data.state, locationInsight: { place: where.place, category: where.category, text, createdAt: new Date().toISOString() } } }));
     return { sent: true, place: where.place, text };
   }
 

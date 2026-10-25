@@ -6,7 +6,7 @@ const transfer = (state, overrides = {}) => proposeTransfer(state, { from: 'shop
 
 test('seed spending is derived from transactions and matches the dinner scenario', () => {
   const state = createSeed();
-  assert.deepEqual(getTotals(state), { limit: 65000, spent: 36900, remaining: 28100 });
+  assert.deepEqual(getTotals(state), { limit: 81000, spent: 42900, remaining: 38100 });
   assert.equal(getBudgets(state).find(b => b.id === 'dining').remaining, 3800);
   assert.equal(getBudgets(state).find(b => b.id === 'shopping').remaining, 6000);
   assert.equal(isValidState(state), true);

@@ -1,0 +1,9 @@
+<svg preserveAspectRatio="none" overflow="visible" style="display: block;" width="11" height="10" viewBox="0 0 11 10" fill="none" xmlns="http://www.w3.org/2000/svg">
+<g id="chart-dot">
+<path d="M11 5C11 7.76142 8.53757 10 5.5 10C2.46243 10 0 7.76142 0 5C0 2.23858 2.46243 0 5.5 0C8.53757 0 11 2.23858 11 5Z" fill="white"/>
+<mask id="stroke0_0_24" fill="white">
+<path d="M11 5C11 7.76142 8.53757 10 5.5 10C2.46243 10 0 7.76142 0 5C0 2.23858 2.46243 0 5.5 0C8.53757 0 11 2.23858 11 5Z"/>
+</mask>
+<path d="M11 5C11 7.76142 8.53757 10 5.5 10C2.46243 10 0 7.76142 0 5C0 2.23858 2.46243 0 5.5 0C8.53757 0 11 2.23858 11 5Z" stroke-width="4" stroke="#7F5679" mask="url(#stroke0_0_24)"/>
+</g>
+</svg>

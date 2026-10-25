@@ -1,4 +1,5 @@
 import { createSeed, isValidState, confirmTransfer, addExpense, proposeTransfer } from './budget.js';
+import { updateProfile, editExpense } from './preferences.js';
 
 export const connected = Boolean(window.__POCKET_CONNECTED__);
 
@@ -13,7 +14,8 @@ function load() {
     if (!raw) return createSeed();
     const parsed = JSON.parse(raw);
     if (!isValidState(parsed)) throw new Error('Invalid saved demo');
-    return parsed;
+    // Saved demos from before a category existed get its seed budget and plans.
+    return { ...parsed, budgets: { ...createSeed().budgets, ...parsed.budgets }, plans: parsed.plans ?? createSeed().plans };
   } catch {
     warning = 'Saved demo data could not be loaded. The starting budget is shown; reset the demo to start fresh.';
     return snapshot;
@@ -63,8 +65,11 @@ export const store = {
   async propose(input) { return connected ? request('proposal', input) : proposeTransfer(snapshot, input); },
   async transfer(proposal) { if (connected) return remote('transfer', { id: proposal.id }); commit(confirmTransfer(warning ? snapshot : load(), proposal)); },
   async addExpense(expense) { if (connected) return remote('expense', expense); commit(addExpense(warning ? snapshot : load(), expense)); },
+  async editExpense(expense) { if (connected) return remote('expense/edit', expense); commit(editExpense(snapshot, expense)); },
+  async updateProfile(input) { if (connected) return remote('profile', input); commit(updateProfile(snapshot, input)); },
   async reset() { if (connected) return remote('reset', {}); commit(createSeed()); },
   message(text) { return remote('message', { text }); },
+  demoArrival(delaySeconds) { return remote('demo-arrival', { delaySeconds }); },
   async location(position) { const result = await remote('location', position); return result.location; },
   // Voice: a recording (or a tapped starter prompt) in; Lila's answer (+ MP3 unless speak is false) out.
   async voice(recording, speak = true) {

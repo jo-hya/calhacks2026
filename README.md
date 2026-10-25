@@ -46,7 +46,7 @@ npm run preview
 - Adjustment history, browser-local persistence, and demo reset.
 - Keyboard-accessible dialogs and mobile navigation.
 
-The demo uses **October 2026** and a fictional user, Jamie Parker. It starts with $38 remaining in Dining and $60 in Clothing (the stable `shopping` category ID). Moving $20 from Clothing to Dining leaves $58 and $40 respectively. Total allocation and transaction spending stay unchanged. Existing saved purchases and Groceries are preserved; amounts are calculated from the demo data rather than copied from Figma's illustrative figures. Native phone status and gesture bars are left to the device.
+The demo uses **October 2026** and a fictional user, Sam. It starts with $38 remaining in Dining and $60 in Clothing (the stable `shopping` category ID). Moving $20 from Clothing to Dining leaves $58 and $40 respectively. Total allocation and transaction spending stay unchanged. Existing saved purchases and Groceries are preserved; amounts are calculated from the demo data rather than copied from Figma's illustrative figures. Native phone status and gesture bars are left to the device.
 
 ## Demo walkthrough
 
@@ -55,6 +55,7 @@ The demo uses **October 2026** and a fictional user, Jamie Parker. It starts wit
 3. Confirm the transfer. Budgets shows $58 left in Dining and $40 in Clothing; Activity records the adjustment.
 4. Reload to verify persistence. Profile → **Reset demo** restores the original scenario.
 5. Tap the center **+** → **Add a purchase** to update the feed and category spending. Home → **View all** opens searchable transactions.
+6. In connected mode with the Claude agent, text Lila: "move $20 from Clothing to Dining". It applies right away and tells you the new balances; text **undo that** to reverse it. Purchases still need a **YES**.
 
 ## Implementation boundaries
 
