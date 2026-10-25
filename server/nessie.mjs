@@ -13,7 +13,7 @@ export async function nessie(path, body, method = body ? 'POST' : 'GET') {
 export async function account() {
   const accounts = await nessie('/accounts');
   const selected = process.env.NESSIE_ACCOUNT_ID ? accounts.find(a => a._id === process.env.NESSIE_ACCOUNT_ID) : accounts.find(a => a.nickname === 'pocket');
-  if (!selected) throw new Error('Set NESSIE_ACCOUNT_ID to your Pocket sandbox account.');
+  if (!selected) throw new Error('Set NESSIE_ACCOUNT_ID to your Lila sandbox account.');
   return selected;
 }
 
@@ -75,4 +75,34 @@ export async function seedNessie() {
     created++;
   }
   console.log(`Nessie sandbox: ${created} demo purchases created; existing demo purchases preserved.`);
+}
+
+// Purchases the Claude agent pays for (an approved ALT). Tagged so a demo reset can remove them.
+const AGENT_TAG = 'pocket-agent:';
+
+export async function createAgentPurchase({ id, merchant, category, amountCents, date, reconcileOnly = false }) {
+  if (!id) throw new Error('A payment action ID is required.');
+  const a = await account();
+  const description = `${AGENT_TAG}${id}`;
+  const purchases = await nessie(`/accounts/${a._id}/purchases`);
+  const existing = purchases.find(p => p.description === description);
+  if (existing?._id) return existing._id;
+  if (reconcileOnly) throw new Error('Payment outcome is still unknown. No new payment was submitted. Check Nessie before resetting the demo.');
+  const merchants = await nessie('/merchants');
+  const name = `Pocket demo - ${merchant}`;
+  let m = merchants.find(x => x.name === name && [x.category].flat().includes(category));
+  if (!m) {
+    m = (await nessie('/merchants', { name, category })).objectCreated;
+    if (!m?._id) throw new Error('Nessie did not return the created merchant.');
+  }
+  // The sandbox stores whole dollars; the agent already proposes whole-dollar amounts.
+  const result = await nessie(`/accounts/${a._id}/purchases`, { merchant_id: m._id, medium: 'balance', purchase_date: date, amount: Math.round(amountCents / 100), description, status: 'completed' });
+  if (!result?.objectCreated?._id) throw new Error('Nessie did not confirm the payment ID. Check its status before retrying.');
+  return result.objectCreated._id;
+}
+
+export async function deleteAgentPurchases() {
+  const a = await account();
+  const purchases = await nessie(`/accounts/${a._id}/purchases`);
+  for (const p of purchases) if (String(p.description || '').startsWith(AGENT_TAG)) await nessie(`/purchase/${p._id}`, undefined, 'DELETE');
 }

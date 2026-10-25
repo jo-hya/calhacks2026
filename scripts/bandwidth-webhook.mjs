@@ -96,6 +96,6 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
 const PORT = 3002;
 const server = createWebhookServer();
 server.listen(PORT, "127.0.0.1", () => {
-  console.log(`Pocket webhook listening on port ${PORT}`);
+  console.log(`Lila webhook listening on port ${PORT}`);
 });
 }

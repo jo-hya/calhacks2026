@@ -3,31 +3,120 @@ import { randomBytes } from 'node:crypto';
 import { mkdirSync, existsSync, readFileSync, writeFileSync, renameSync } from 'node:fs';
 import { resolve, extname, sep } from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { createSeed, addExpense, confirmTransfer, proposeTransfer } from '../src/lib/budget.js';
-import { syncNessie } from './nessie.mjs';
+import { createSeed, addExpense, confirmTransfer, proposeTransfer, DEMO_DATE } from '../src/lib/budget.js';
+import { syncNessie, createAgentPurchase, deleteAgentPurchases } from './nessie.mjs';
 import { respond, INVITATION } from './conversation.mjs';
 import { sendSMS } from './bandwidth.mjs';
+import { runAgent } from './agent.mjs';
+import { splitSms } from './sms-text.mjs';
+import { lookupPlace } from './place.mjs';
 
-export function createDemoServer({ file = '.pocket/state.json', sync = syncNessie, send = sendSMS, env = process.env, initial, token = randomBytes(24).toString('hex') } = {}) {
+const PENDING_TTL_MS = 30 * 60 * 1000;
+const NUDGE_COOLDOWN_MS = 20 * 60 * 1000;
+const MAX_HISTORY = 24;
+const TROUBLE = 'Lila is having trouble connecting. An approved action may have completed. Check the app before trying again.';
+
+// `agent` is the Claude agent (on when ANTHROPIC_API_KEY is set); without it the scripted
+// responder in conversation.mjs answers, as before.
+export function createDemoServer({ file = '.pocket/state.json', sync = syncNessie, send = sendSMS, env = process.env, initial, token = randomBytes(24).toString('hex'),
+  agent = env.ANTHROPIC_API_KEY ? runAgent : null, pay = createAgentPurchase, clearAgentPurchases = deleteAgentPurchases, locate = lookupPlace } = {}) {
   mkdirSync(resolve(file, '..'), { recursive: true });
   let data = initial || (existsSync(file) ? JSON.parse(readFileSync(file, 'utf8')) : { state: createSeed(), proposals: {}, messages: [], inbox: {}, outbox: [] });
+  data = { ...data, agent: data.agent || { pending: null, history: [] } };
+  const lastNudge = new Map();
   let queue = Promise.resolve();
   let syncWarning = '';
   const serial = fn => { const result = queue.then(fn); queue = result.catch(() => {}); return result; };
   function save(next) { writeFileSync(file + '.tmp', JSON.stringify(next)); renameSync(file + '.tmp', file); data = next; }
-  function view() { return { ...data.state, connectionWarning: syncWarning, conversation: data.messages, pendingReply: data.proposals.simulation ? `YES ${data.proposals.simulation.code}` : null, smsStatus: data.outbox.slice(-5).map(o => ({ status: o.status, error: o.error })), phone: env.BANDWIDTH_PHONE_NUMBER || '', invitation: INVITATION }; }
+  function view() { return { ...data.state, connectionWarning: syncWarning, conversation: data.messages, pendingReply: agent ? (livePending() ? 'YES' : null) : data.proposals.simulation ? `YES ${data.proposals.simulation.code}` : null, agentEnabled: Boolean(agent), smsStatus: data.outbox.slice(-5).map(o => ({ status: o.status, error: o.error })), phone: env.BANDWIDTH_PHONE_NUMBER || '', invitation: INVITATION }; }
   async function refresh() {
     try { const state = await sync(data.state); save({ ...data, state }); syncWarning = ''; }
     catch (error) { syncWarning = 'Nessie could not refresh. Showing the last saved purchases; text approvals require a fresh connection.'; throw error; }
   }
+  function livePending() {
+    const p = data.agent.pending;
+    return p && (p.attempted || p.expiresAt > Date.now()) ? p : null;
+  }
+  const saveAgent = fields => save({ ...data, agent: { ...data.agent, ...fields } });
+
+  // How the Claude agent reads and changes the shared data. Every change runs in `serial`,
+  // but Claude's thinking happens outside it, so the app stays responsive during a turn.
+  const ops = {
+    state: () => data.state,
+    pending: livePending,
+    history: () => data.agent.history,
+    setPending: action => serial(() => {
+      if (data.agent.pending?.attempted) throw new Error('Check the previous payment with YES before proposing another action; its outcome is uncertain.');
+      // Validate up front so the agent can't ask the user to approve something impossible.
+      if (action.kind === 'transfer') proposeTransfer(data.state, { ...action, id: 'check' });
+      const pending = { ...action, id: `act-${randomBytes(4).toString('hex')}`, expiresAt: Date.now() + PENDING_TTL_MS };
+      saveAgent({ pending });
+      return pending;
+    }),
+    clearPending: () => serial(() => {
+      if (data.agent.pending?.attempted) throw new Error('The payment was already submitted and cannot be cancelled here. Reply YES to check its status.');
+      saveAgent({ pending: null });
+    }),
+    appendHistory: (...messages) => serial(() => {
+      const history = [...data.agent.history, ...messages].slice(-MAX_HISTORY);
+      while (history.length && history[0].role !== 'user') history.shift();
+      saveAgent({ history });
+    }),
+    async applyPending(id) {
+      // Claim the action first so it can't run twice.
+      const action = await serial(() => {
+        const p = livePending();
+        if (!p || p.id !== id) throw new Error('That action is no longer pending.');
+        if (p.kind === 'transfer') {
+          const proposal = proposeTransfer(data.state, { ...p, id: p.id });
+          save({ ...data, state: confirmTransfer(data.state, proposal), agent: { ...data.agent, pending: null } });
+        } else saveAgent({ pending: { ...p, attempted: true } });
+        return { ...p, reconcileOnly: Boolean(p.attempted) };
+      });
+      if (action.kind !== 'purchase') return;
+      // An approved ALT: pay through Nessie, then import it like any other purchase.
+      // Persist the attempt before contacting Nessie. After a timeout or restart,
+      // retry only looks up this action's purchase; it must never submit it again.
+      await pay({ ...action, date: DEMO_DATE });
+      await serial(() => { if (data.agent.pending?.id === id) saveAgent({ pending: null }); });
+      await serial(refresh);
+    },
+  };
+
+  const log = (...messages) => serial(() => save({ ...data, messages: [...data.messages, ...messages].slice(-100) }));
+  const queueTexts = (id, text) => serial(() => save({ ...data, outbox: [...data.outbox, ...splitSms(text).map((part, i) => ({ id: i ? `${id}-${i + 1}` : id, text: part, status: 'queued' }))] }));
+
+  // One reply to a user message, from Claude or (without a key) the scripted responder.
+  async function reply(text, channel) {
+    let fresh = true;
+    try { await serial(refresh); } catch { fresh = false; }
+    if (!agent) {
+      return serial(() => {
+        const next = fresh ? respond(data, text, channel) : { ...data, reply: 'Nessie is unavailable. No budget changes made. Please try again shortly.' };
+        save(next);
+        return next.reply;
+      });
+    }
+    let answer;
+    try { answer = await agent({ ops, text, trigger: channel === 'sms' ? 'sms' : 'simulation', bankFresh: fresh }); }
+    catch (error) { console.error('Agent error:', error.message); answer = TROUBLE; }
+    await log({ who: 'You', text, channel }, { who: 'Lila', text: answer, channel });
+    return answer;
+  }
+
+  // Inbox events are answered one at a time, in order; texts go out after each answer.
+  let inboxQueue = Promise.resolve();
+  const processInbox = () => (inboxQueue = inboxQueue.then(drain).catch(() => console.error('SMS processing failed; pending messages retained.')));
   async function drain() {
     for (const [id, event] of Object.entries(data.inbox)) {
       if (event.done) continue;
-      let next;
-      try { await refresh(); next = respond(data, event.text, 'sms'); }
-      catch { next = { ...data, reply: 'Nessie is unavailable. No budget changes made. Please try again shortly.' }; }
-      save({ ...next, inbox: { ...next.inbox, [id]: { ...event, done: true } }, outbox: [...next.outbox, { id, text: next.reply, status: 'queued' }] });
+      const answer = await reply(event.text, 'sms');
+      await serial(() => save({ ...data, inbox: { ...data.inbox, [id]: { ...event, done: true } } }));
+      await queueTexts(id, answer);
     }
+    await serial(sendQueued);
+  }
+  async function sendQueued() {
     for (const item of data.outbox.filter(o => o.status === 'queued')) {
       const update = fields => save({ ...data, outbox: data.outbox.map(o => o.id === item.id ? { ...o, ...fields } : o) });
       // Persist before sending: a crash after provider acceptance must not blindly resend.
@@ -67,7 +156,7 @@ export function createDemoServer({ file = '.pocket/state.json', sync = syncNessi
           save({ ...data, inbox, outbox });
         }
         res.writeHead(204); res.end();
-        setImmediate(() => serial(drain).catch(() => console.error('SMS processing failed; pending messages retained.')));
+        setImmediate(processInbox);
         return;
       }
       if (url.pathname === `/pair/${token}` && req.method === 'GET') {
@@ -78,15 +167,22 @@ export function createDemoServer({ file = '.pocket/state.json', sync = syncNessi
         if (req.method === 'GET' && url.pathname === '/api/state') return json(200, view());
         if (req.method !== 'POST' || req.headers['content-type'] !== 'application/json') return json(400, { error: 'Expected a JSON POST.' });
         const input = await body(req);
+        // These wait on Claude, so they run outside `serial` (their changes go through ops).
+        if (url.pathname === '/api/message') {
+          if (typeof input.text !== 'string' || !input.text.trim() || input.text.length > 1000) throw new Error('Invalid message.');
+          await reply(input.text.trim(), 'simulation');
+          return json(200, view());
+        }
+        if (url.pathname === '/api/location') return json(200, { ...view(), location: await nudge(input) });
         const result = await serial(async () => {
           if (url.pathname === '/api/sync') await refresh();
-          else if (url.pathname === '/api/message') {
-            if (typeof input.text !== 'string' || input.text.length > 1000) throw new Error('Invalid message.');
-            await refresh(); save(respond(data, input.text));
-          } else if (url.pathname === '/api/reset') {
+          else if (url.pathname === '/api/reset') {
+            // Remove purchases the agent paid for, so the demo starts from the seed again.
+            if (env.NESSIE_API_KEY) await clearAgentPurchases();
             const state = await sync(createSeed());
             // Keep processed SMS IDs and outbox so delayed callbacks cannot replay actions.
-            save({ ...data, state: { ...state, revision: data.state.revision + 1 }, proposals: {}, messages: [] });
+            save({ ...data, state: { ...state, revision: data.state.revision + 1 }, proposals: {}, messages: [], agent: { pending: null, history: [] } });
+            lastNudge.clear();
           } else if (url.pathname === '/api/expense') save({ ...data, state: addExpense(data.state, { ...input, source: 'manual' }) });
           else if (url.pathname === '/api/proposal') {
             const p = proposeTransfer(data.state, input);
@@ -111,7 +207,34 @@ export function createDemoServer({ file = '.pocket/state.json', sync = syncNessi
       res.writeHead(200, { 'Content-Type': mime, 'Referrer-Policy': 'no-referrer', 'Cache-Control': 'no-store' }); res.end(content);
     } catch (error) { json(400, { error: error.message }); }
   });
-  return { server, token, refresh: () => serial(refresh), resume: () => serial(drain) };
+  // The app reports where the phone is; if it's somewhere you'd spend money, the agent
+  // decides whether a heads-up text is worth sending. `place`/`category` skip the lookup
+  // (the demo's "pretend I'm at" buttons send them).
+  async function nudge({ lat, lng, place, category, city, region }) {
+    if (!Number.isFinite(lat) || !Number.isFinite(lng)) throw new Error('lat and lng are required.');
+    if (!agent) return { sent: false, reason: 'The Claude agent is off (no ANTHROPIC_API_KEY).' };
+    let where = { place, category, city, region };
+    if (!category) {
+      try { where = { ...(await locate(lat, lng)), ...(place && { place }) }; }
+      catch { return { sent: false, reason: 'Could not look up this location.' }; }
+    }
+    if (!where.category) return { sent: false, reason: 'Not a place where you usually spend.', place: where.place };
+    const key = where.place || `${lat.toFixed(3)},${lng.toFixed(3)}`;
+    if (Date.now() - (lastNudge.get(key) ?? 0) < NUDGE_COOLDOWN_MS) return { sent: false, reason: 'Already nudged here recently.', place: where.place };
+    lastNudge.set(key, Date.now());
+    let fresh = true;
+    try { await serial(refresh); } catch { fresh = false; }
+    let text;
+    try { text = await agent({ ops, trigger: 'location', location: { lat, lng, ...where }, bankFresh: fresh }); }
+    catch (error) { console.error('Agent error:', error.message); lastNudge.delete(key); return { sent: false, reason: 'Lila could not reach Claude.' }; }
+    if (!text || text === 'SKIP') return { sent: false, reason: 'Plenty of room in that budget.', place: where.place };
+    await log({ who: 'Lila', text, channel: 'sms' });
+    await queueTexts(`nudge-${randomBytes(4).toString('hex')}`, text);
+    await serial(sendQueued);
+    return { sent: true, place: where.place, text };
+  }
+
+  return { server, token, refresh: () => serial(refresh), resume: processInbox };
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
@@ -123,9 +246,9 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
   }
   app.server.listen(3002, '127.0.0.1', () => {
     writeFileSync('.pocket/device-link.json', JSON.stringify({ token: app.token, port: 3002 }));
-    console.log(`Pocket connected demo: http://127.0.0.1:3002/pair/${app.token}`);
+    console.log(`Lila connected demo: http://127.0.0.1:3002/pair/${app.token}`);
     console.log(`Phone: use your ngrok HTTPS host with /pair/${app.token}`);
-    console.log('Scripted responder active. Text DINNER from your verified phone.');
+    console.log(process.env.ANTHROPIC_API_KEY ? 'Claude agent active. Text Lila from your verified phone.' : 'Scripted responder active (no ANTHROPIC_API_KEY). Text DINNER from your verified phone.');
     app.resume().catch(() => console.error('Pending SMS could not be processed.'));
   });
 }

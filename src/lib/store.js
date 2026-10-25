@@ -20,12 +20,12 @@ function load() {
   }
 }
 snapshot = connected ? createSeed() : load();
-if (connected) warning = 'Connecting to your shared Pocket budget...';
+if (connected) warning = 'Connecting to your shared Lila budget...';
 
 async function request(path, body) {
   const response = await fetch(`/api/${path}`, { method: body ? 'POST' : 'GET', headers: body ? { 'Content-Type': 'application/json' } : {}, body: body && JSON.stringify(body) });
   const result = await response.json();
-  if (!response.ok) throw new Error(result.error || 'Pocket could not connect.');
+  if (!response.ok) throw new Error(result.error || 'Lila could not connect.');
   return result;
 }
 function publish(next) { snapshot = next; warning = next.connectionWarning || ''; listeners.forEach(listener => listener()); }
@@ -65,5 +65,6 @@ export const store = {
   async addExpense(expense) { if (connected) return remote('expense', expense); commit(addExpense(warning ? snapshot : load(), expense)); },
   async reset() { if (connected) return remote('reset', {}); commit(createSeed()); },
   message(text) { return remote('message', { text }); },
+  async location(position) { const result = await remote('location', position); return result.location; },
   sync() { return remote('sync', {}); },
 };
