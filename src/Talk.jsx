@@ -11,6 +11,36 @@ const STARTERS = [
   { text: 'Help me save for a trip next month', icon: 'chat-sprout-108b1.svg' },
 ];
 const firstName = state => ({ ...DEFAULT_PROFILE, ...state.profile }).name.split(' ')[0];
+// Sorts after every timestamp, so nothing shows until the conversation has loaded.
+export const NOT_LOADED = '￿';
+// Chat and voice turns separated by a quiet stretch this long count as separate conversations.
+const CONVERSATION_GAP_MS = 30 * 60 * 1000;
+
+// Earlier chat and voice conversations (everything before `since`), newest first.
+export function pastChats(conversation = [], since) {
+  if (since === NOT_LOADED) return [];
+  const sessions = [];
+  for (const m of conversation) {
+    if (m.channel === 'sms' || !m.at || m.at > since) continue;
+    const last = sessions.at(-1);
+    if (last && Date.parse(m.at) - Date.parse(last.to) <= CONVERSATION_GAP_MS) { last.messages.push(m); last.to = m.at; }
+    else sessions.push({ from: m.at, to: m.at, messages: [m] });
+  }
+  return sessions.reverse().map(s => ({
+    ...s,
+    title: titleFor(s.messages),
+    voice: s.messages.every(m => m.channel === 'voice'),
+  }));
+}
+// Short label for a conversation: the first few content words of what the user first said.
+const TITLE_SKIP = new Set(['a', 'an', 'the', 'to', 'of', 'for', 'and', 'or', 'i', 'i’m', 'im', 'me', 'my', 'am', 'is', 'are', 'was', 'be', 'do', 'does', 'can', 'could', 'would', 'you', 'your', 'it', 'this', 'that', 'what', 'how', 'about', 'with', 'in', 'on', 'at', 'some', 'please', 'hey', 'hi', 'hello', 'lila', 'so', 'just', 'want', 'need', 'like', 'know', 'tell', 'get']);
+function titleFor(messages) {
+  const text = messages.find(m => m.who === 'You')?.text || messages[0].text;
+  const words = text.split(/\s+/).map(w => w.replace(/[^\p{L}\p{N}’'-]/gu, '')).filter(Boolean);
+  const content = words.filter(w => !TITLE_SKIP.has(w.toLowerCase()));
+  return (content.length ? content : words).slice(0, 6).map(w => w[0].toUpperCase() + w.slice(1).toLowerCase()).join(' ');
+}
+const whenLabel = at => new Date(at).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
 
 function TalkHeader({ onBack, backLabel }) {
   return <header className="lf-talk-header">
@@ -34,8 +64,11 @@ export function ChatScreen({ state, navigate, since }) {
   const [draft, setDraft] = useState('');
   const [pending, setPending] = useState('');
   const [error, setError] = useState('');
+  // A previous conversation opened read-only from the list under the starters.
+  const [openPast, setOpenPast] = useState(null);
   const end = useRef(null);
-  const thread = (state.conversation || []).filter(m => m.channel !== 'sms' && m.at && m.at > since);
+  const past = pastChats(state.conversation, since);
+  const thread = openPast ? openPast.messages : (state.conversation || []).filter(m => m.channel !== 'sms' && m.at && m.at > since);
   useEffect(() => { end.current?.scrollIntoView({ block: 'end' }); }, [thread.length, pending]);
 
   async function send(text) {
@@ -49,7 +82,7 @@ export function ChatScreen({ state, navigate, since }) {
   }
 
   return <section className="lf-talk lf-chat" aria-label="Chat with Lila">
-    <TalkHeader onBack={() => navigate('overview')} backLabel="Back to Home" />
+    <TalkHeader onBack={() => openPast ? setOpenPast(null) : navigate('overview')} backLabel={openPast ? 'Back to chats' : 'Back to Home'} />
     <div className="lf-talk-body">
       {!thread.length && !pending ? <div className="lf-talk-sanctuary">
         <h1 className="lf-talk-title">Let’s chat, {firstName(state)}!</h1>
@@ -60,6 +93,12 @@ export function ChatScreen({ state, navigate, since }) {
             <img src={art(s.icon)} alt="" /><span>{s.text}</span><img src={art('chat-arrow-up-right-65c38.svg')} alt="" />
           </button>)}
         </div>
+        {past.length > 0 && <div className="lf-starters lf-past">
+          <p>Previous chats</p>
+          {past.map(s => <button key={s.from} className="lf-starter lf-past-chat" onClick={() => setOpenPast(s)}>
+            <span>{s.title}</span><img src={art('chat-arrow-up-right-65c38.svg')} alt="" />
+          </button>)}
+        </div>}
       </div> : <ol className="lf-thread" aria-live="polite">
         {thread.map((m, i) => <li key={`${m.at}-${i}`} className={`lf-bubble ${m.who === 'You' ? 'from-you' : 'from-lila'}`}>{m.text}</li>)}
         {pending && <><li className="lf-bubble from-you">{pending}</li><li className="lf-typing"><img src={art('talk-logo-79e59.svg')} alt="" />Lila is thinking…</li></>}
@@ -67,13 +106,13 @@ export function ChatScreen({ state, navigate, since }) {
       {error && <p className="lf-talk-note" role="alert">{error}</p>}
       <div ref={end} />
     </div>
-    <form className="lf-composer" onSubmit={e => { e.preventDefault(); send(draft); }}>
+    {openPast ? <p className="lf-talk-note">Previous conversation · {whenLabel(openPast.from)}</p> : <form className="lf-composer" onSubmit={e => { e.preventDefault(); send(draft); }}>
       <img src={art('chat-message-circle-65db2.svg')} alt="" />
       <label className="sr-only" htmlFor="lila-message">Message Lila</label>
       <input id="lila-message" value={draft} onChange={e => setDraft(e.target.value)} placeholder="Type a message to Lila…" maxLength={1000} autoComplete="off" enterKeyHint="send" />
       <button type="button" className="lf-composer-mic" aria-label="Talk to Lila" onClick={() => navigate('voice')}><img src={art('chat-mic-a6257.svg')} alt="" /></button>
       <button className="lf-composer-send" aria-label="Send message" disabled={!draft.trim() || Boolean(pending)}><img src={art('chat-send-ed660.svg')} alt="" /></button>
-    </form>
+    </form>}
   </section>;
 }
 

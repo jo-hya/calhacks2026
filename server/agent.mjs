@@ -46,9 +46,9 @@ export function buildTools(ops, ctx) {
   const tools = [
     betaZodTool({
       name: 'save_recommendations',
-      description: 'Show researched nearby alternatives in the companion app. Prices are estimates, not verified quotes. Only include places found in search and their real source URLs.',
-      inputSchema: z.object({ places: z.array(z.object({ name: z.string().min(1).max(80), area: z.string().max(100), description: z.string().max(350), estimatedPrice: z.number().min(0).max(10000), sourceUrl: z.string().url() })).min(1).max(5) }),
-      run: async ({ places }) => { await ops.recommendations(places.filter(p => /^https:\/\//.test(p.sourceUrl))); return 'Saved to Nearby in the app. The user can open details and directions there.'; },
+      description: 'Show researched nearby alternatives in the companion app, grouped under a label for this search. Prices are estimates, not verified quotes. Only include places found in search and their real source URLs. Earlier results stay saved until the user removes them.',
+      inputSchema: z.object({ search: z.string().min(1).max(60).describe('Short label for what was searched, e.g. "Dinner near Mission".'), category: Category.describe('The budget category these places are for.'), places: z.array(z.object({ name: z.string().min(1).max(80), area: z.string().max(100), description: z.string().max(350), estimatedPrice: z.number().min(0).max(10000), sourceUrl: z.string().url() })).min(1).max(5) }),
+      run: async ({ search, category, places }) => { await ops.recommendations(places.filter(p => /^https:\/\//.test(p.sourceUrl)), search, category); return 'Saved to Nearby in the app. The user can open details and directions there.'; },
     }),
     betaZodTool({
       name: 'get_budget_overview',

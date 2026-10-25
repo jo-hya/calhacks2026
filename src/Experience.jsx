@@ -1,10 +1,10 @@
-import { useEffect, useRef, useState } from 'react';
+import { Fragment, useEffect, useRef, useState } from 'react';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import { CATEGORIES, DEMO_DATE, getBudgets, getTotals, money } from './lib/budget.js';
 import { DEFAULT_PROFILE } from './lib/preferences.js';
 import { store, connected } from './lib/store.js';
-import { locationStatus, nativeLocation, startSharing, stopSharing } from './lib/location.js';
+import { locationStatus, meters, nativeLocation, startSharing, stopSharing } from './lib/location.js';
 
 export const art = name => `/figma/final/${name}`;
 const pinIcon = (number, active) => L.divIcon({ className: 'map-pin-wrap', html: `<img class="map-pin${active ? ' active' : ''}" src="/figma/final/pin.png" alt="Place ${number}" />`, iconSize: [41, 41], iconAnchor: [20, 41] });
@@ -47,7 +47,7 @@ const DISPLAY_ORDER = ['dining', 'shopping', 'transport', 'social', 'groceries']
 export const inDisplayOrder = budgets => [...budgets].sort((a, b) => DISPLAY_ORDER.indexOf(a.id) - DISPLAY_ORDER.indexOf(b.id));
 const firstName = state => ({ ...DEFAULT_PROFILE, ...state.profile }).name.split(' ')[0];
 
-export function Home({ state, navigate, onAdd }) {
+export function Home({ state, navigate, onAdd, onCategory, onDinner }) {
   const budgets = inDisplayOrder(getBudgets(state));
   const totals = getTotals(state);
   const dining = budgets.find(b => b.id === 'dining');
@@ -63,8 +63,8 @@ export function Home({ state, navigate, onAdd }) {
     <header className="lf-hero">
       <LilaBrand />
       <PlusButton label="Add a purchase" onClick={onAdd} />
-      <h1>Need something for<br /><strong>dinner</strong> <span>{firstName(state)}?</span></h1>
-      <button className="lf-suggestion" onClick={() => navigate('nearby')}>
+      <h1>Need a cup of<br /><strong>coffee</strong> <span>{firstName(state)}?</span></h1>
+      <button className="lf-suggestion" onClick={() => onDinner(diningAllowance)}>
         <span className="lf-big-flower" aria-hidden="true">
           <span className="lf-big-flower-shadow"><img src={art('home-flower-shadow-5597f.svg')} alt="" /></span>
           <span className="lf-big-flower-front"><img src={art('home-flower-front-b45d1.svg')} alt="" /></span>
@@ -76,7 +76,7 @@ export function Home({ state, navigate, onAdd }) {
     </header>
     <p className="lf-day-label">Budget for the day</p>
     <p className="lf-day-amount">{money(dayBudget)}</p>
-    <div className="lf-section-head"><h2>Schedule</h2><button onClick={() => navigate('budgets')}>Modify</button></div>
+    <div className="lf-section-head"><h2>Schedule</h2></div>
     <ol className="lf-schedule">{plans.map((p, i) => <li key={p.id}>
       <img className={`lf-dot${i === plans.length - 1 ? ' pulse' : ''}`} src={art(dot(i))} alt="" />
       {i < plans.length - 1 && <img className="lf-line" src={art('schedule-line-f65b6.svg')} alt="" />}
@@ -84,7 +84,7 @@ export function Home({ state, navigate, onAdd }) {
       <span className="lf-plan-amount">{money(p.amountCents)}</span>
     </li>)}</ol>
     <div className="lf-section-head lf-tracking-head"><h2>Budget Tracking</h2><button onClick={() => navigate('budgets')}>See more</button></div>
-    <div className="lf-tracking" aria-label="Budget tracking">{budgets.map(b => <button className="lf-track-card" key={b.id} onClick={() => navigate('budgets')} aria-label={`${b.name}: ${money(b.remaining)} left`}>
+    <div className="lf-tracking" aria-label="Budget tracking">{budgets.map(b => <button className="lf-track-card" key={b.id} onClick={() => onCategory(b.id)} aria-label={`${b.name}: ${money(b.remaining)} left`}>
       <CategoryArt id={b.id} /><span className="lf-track-name">{b.name}</span><strong>{money(b.remaining)}</strong>
     </button>)}</div>
   </div>;
@@ -104,8 +104,7 @@ export function LocationControl({ state }) {
   return <div className="location-control"><div><strong>Nearby heads-ups</strong><span>{status.active ? 'On · looking out for your budget' : 'Off · your location stays private'}</span></div><button className="button secondary" disabled={busy || !connected} onClick={toggle}>{busy ? 'One moment…' : status.active ? 'Pause' : 'Enable'}</button><p>{nativeLocation ? 'Allow location to get a text near spending spots, even when you switch apps or lock your phone. Pause anytime.' : 'Location works while this page is open. Background heads-ups are available in the Android app.'}</p>{status.active && status.message && <p role="status">{status.message}</p>}{error && <p role="alert" className="form-error">{error}</p>}</div>;
 }
 
-export function Nearby({ state, onAdd }) {
-  const dining = getBudgets(state).find(b => b.id === 'dining');
+export function Nearby({ state, onAdd, request }) {
   const profile = { ...DEFAULT_PROFILE, ...state.profile };
   const loc = state.lastLocation;
   const lat = loc?.lat ?? 37.7599, lng = loc?.lng ?? -122.4148;
@@ -113,57 +112,111 @@ export function Nearby({ state, onAdd }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   // The map pins each recommendation; choosing a card or a pin highlights both.
+  // Saved places persist until removed; newer searches are added to the list, not swapped in.
   const places = state.recommendations || [];
+  // Each search is its own group, labeled with what was asked for; groups keep the order they were first saved in.
+  const groups = new Map();
+  for (const p of places) { const label = p.search || 'Earlier picks'; groups.set(label, [...(groups.get(label) || []), p]); }
+  const ordered = [...groups.values()].flat();
+  // The header names the category of the newest search, so a clothing search doesn't say "Dining".
+  const headerCategory = ordered[0]?.category || 'dining';
+  const headerBudget = getBudgets(state).find(b => b.id === headerCategory) || getBudgets(state).find(b => b.id === 'dining');
   const [selected, setSelected] = useState(null);
-  const mapHost = useRef(null), map = useRef(null), pins = useRef([]);
+  const selectedPlace = ordered.find(p => p.id === selected);
+  const [removeError, setRemoveError] = useState('');
+  const mapHost = useRef(null), map = useRef(null), pins = useRef([]), cards = useRef({}), me = useRef(null), searchedAt = useRef(null);
   useEffect(() => {
     const instance = L.map(mapHost.current, { zoomControl: false }).setView([lat, lng], 14);
     instance.attributionControl.setPrefix(false);
     // OpenStreetMap's terms require the credit line; CSS mutes the tiles toward the design's light map.
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19, attribution: '© OpenStreetMap contributors' }).addTo(instance);
-    if (loc) L.circleMarker([lat, lng], { radius: 7, color: '#fff', weight: 3, fillColor: '#3d1d46', fillOpacity: 1 }).addTo(instance);
     map.current = instance;
     return () => { instance.remove(); map.current = null; };
   }, []);
+  // Keeps the map centered on the user and their dot current as location updates.
+  useEffect(() => {
+    const instance = map.current;
+    if (!instance || !loc) return;
+    me.current?.remove();
+    me.current = L.circleMarker([loc.lat, loc.lng], { radius: 7, color: '#fff', weight: 3, fillColor: '#3d1d46', fillOpacity: 1 }).addTo(instance);
+    instance.setView([loc.lat, loc.lng], instance.getZoom());
+  }, [loc?.lat, loc?.lng]);
+  // In a new area with no saved places nearby, search once for dining near here.
+  useEffect(() => {
+    if (!loc || !connected || !state.agentEnabled || busy) return;
+    const nearby = places.some(p => p.lat != null && meters({ lat: p.lat, lng: p.lng }, loc) < 1500);
+    const key = `${loc.lat.toFixed(2)},${loc.lng.toFixed(2)}`;
+    if (nearby || searchedAt.current === key) return;
+    searchedAt.current = key;
+    find();
+  }, [loc?.lat, loc?.lng, state.agentEnabled, connected]);
   useEffect(() => {
     const instance = map.current;
     if (!instance) return;
     pins.current.forEach(pin => pin.remove());
-    pins.current = places.flatMap((p, i) => p.lat == null ? [] : [L.marker([p.lat, p.lng], { icon: pinIcon(i + 1, i === selected), title: p.name, zIndexOffset: i === selected ? 1000 : 0 }).on('click', () => choose(i)).addTo(instance)]);
+    pins.current = ordered.flatMap((p, i) => p.lat == null ? [] : [L.marker([p.lat, p.lng], { icon: pinIcon(i + 1, p.id === selected), title: p.name, zIndexOffset: p.id === selected ? 1000 : 0 }).on('click', () => choose(p.id)).addTo(instance)]);
   }, [state.recommendations, selected]);
+  // Fits the map to pins near the user, so places in other cities don't pull the view away.
   useEffect(() => {
     const instance = map.current;
     const located = pins.current.map(pin => pin.getLatLng());
-    if (instance && located.length) instance.fitBounds(located, { padding: [48, 48], maxZoom: 16 });
+    if (!instance || !located.length) return;
+    const near = loc ? located.filter(p => meters({ lat: p.lat, lng: p.lng }, loc) < 5000) : located;
+    if (loc && !near.length) return;
+    instance.fitBounds(loc ? [...near, [loc.lat, loc.lng]] : near, { padding: [48, 48], maxZoom: 16 });
   }, [state.recommendationsAt]);
-  function choose(i) {
-    setSelected(i);
-    const p = places[i];
+  // The arrow on Home asks for coffee that fits the daily dining allowance.
+  useEffect(() => { if (request) find(request); }, [request]);
+  // A pin or a card opens the same place: the map pans to it and its card scrolls into the sheet.
+  function choose(id) {
+    setSelected(id);
+    const p = places.find(place => place.id === id);
     if (p?.lat != null) map.current?.panTo([p.lat, p.lng]);
   }
-  async function find() {
+  async function remove(id) {
+    setRemoveError('');
+    try { await store.removeRecommendation(id); if (selected === id) setSelected(null); }
+    catch (e) { setRemoveError(e.message); }
+  }
+  const dayOf = place => new Date(place.savedAt || state.recommendationsAt || Date.now()).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+  async function find(request) {
     setBusy(true); setError('');
-    try { await store.message(`Find up to 3 cheaper dining options near ${area}. My preferences: ${profile.preferences || 'flexible'}. Read my dining budget and save the researched recommendations to the app. Include source links and label prices as estimates. Do not propose purchases.`); }
+    const ask = request ? `Find ${request.ask} I can afford on about ${money(request.budgetCents)} per person or less near ${area}.` : `Find up to 5 cheaper dining options near ${area}.`;
+    try { await store.message(`${ask} My preferences: ${profile.preferences || 'flexible'}. Read my dining budget and save the researched recommendations to the app. Include source links and label prices as estimates. Do not propose purchases.`); }
     catch(e) { setError(e.message); } finally { setBusy(false); }
   }
   return <div className="lf-screen lf-nearby">
     <Glow x={-45} y={496} />
     <div className="lf-map">
       <div className="leaflet-host" ref={mapHost} role="region" aria-label="Map of nearby places" />
-      <LilaBrand logo={false} />
+      <LilaBrand />
       <PlusButton label="Add a purchase" onClick={onAdd} />
+      {selectedPlace && <div className="lf-map-card" role="dialog" aria-label={selectedPlace.name}>
+        <div className="lf-place-thumb" aria-hidden="true">{selectedPlace.photo ? <img src={`/api/place-photo?name=${encodeURIComponent(selectedPlace.photo)}`} alt="" /> : selectedPlace.name.slice(0,1)}</div>
+        <div className="lf-map-card-body"><h2>{selectedPlace.name}</h2><p>{selectedPlace.description}</p>
+          <div className="lf-place-more"><span>About {money(Math.round(selectedPlace.estimatedPrice*100))} per person · estimate</span><a href={selectedPlace.sourceUrl} target="_blank" rel="noreferrer">Details ↗</a><a href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(selectedPlace.name+' '+selectedPlace.area)}`} target="_blank" rel="noreferrer">Directions ↗</a></div>
+        </div>
+        <button className="lf-map-card-close" aria-label="Close place" onClick={() => setSelected(null)}>×</button>
+      </div>}
     </div>
     <section className="lf-places">
-      <p className="lf-places-budget"><strong>Dining</strong>: <em>{money(dining.remaining)} left</em></p>
+      <p className="lf-places-budget"><strong>{CATEGORIES.find(c => c.id === headerCategory)?.name}</strong>: <em>{money(headerBudget.remaining)} left</em></p>
       <h1>{area}</h1>
-      {places.map((p,i) => <article className={`lf-place${i === selected ? ' selected' : ''}`} key={`${p.name}-${i}`} tabIndex={0} onClick={() => choose(i)} onKeyDown={e => { if (e.key === 'Enter') choose(i); }} aria-current={i === selected || undefined}>
-        <div className="lf-place-thumb" aria-hidden="true">{p.name.slice(0,1)}</div>
-        <div className="lf-place-body"><h2>{i+1}. {p.name}</h2><p>{p.description}</p>
-          {i === selected && <div className="lf-place-more"><span>About {money(Math.round(p.estimatedPrice*100))} per person · estimate</span><a href={p.sourceUrl} target="_blank" rel="noreferrer">Details ↗</a><a href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(p.name+' '+p.area)}`} target="_blank" rel="noreferrer">Directions ↗</a></div>}
-        </div>
-      </article>)}
+      {[...groups].map(([label, items]) => <Fragment key={label}>
+        <p className="lf-places-day">{label} · {dayOf(items[0])}</p>
+        {items.map(p => { const i = ordered.indexOf(p); return <Fragment key={p.id}>
+        <article className={`lf-place${p.id === selected ? ' selected' : ''}`} ref={el => { cards.current[p.id] = el; }} tabIndex={0} onClick={() => choose(p.id)} onKeyDown={e => { if (e.key === 'Enter') choose(p.id); }} aria-current={p.id === selected || undefined}>
+          <div className="lf-place-thumb" aria-hidden="true">{p.photo ? <img src={`/api/place-photo?name=${encodeURIComponent(p.photo)}`} alt="" loading="lazy" /> : p.name.slice(0,1)}</div>
+          <div className="lf-place-body"><h2>{i+1}. {p.name}</h2><p>{p.description}</p>
+            {p.id === selected && <div className="lf-place-more"><span>About {money(Math.round(p.estimatedPrice*100))} per person · estimate</span><a href={p.sourceUrl} target="_blank" rel="noreferrer">Details ↗</a><a href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(p.name+' '+p.area)}`} target="_blank" rel="noreferrer">Directions ↗</a></div>}
+            <button className="lf-place-remove" onClick={e => { e.stopPropagation(); remove(p.id); }}>Remove</button>
+          </div>
+        </article>
+      </Fragment>; })}
+      </Fragment>)}
+      {removeError && <p role="alert" className="form-error">{removeError}</p>}
       {!places.length && <div className="nearby-empty"><Flower /><h2>Find your next little favorite.</h2><p>Lila uses your budget and preferences to find a few places worth trying.</p></div>}
-      <button className="button primary full-width lf-find" disabled={busy || !connected || !state.agentEnabled} onClick={find}>{busy ? 'Lila is finding a few options…' : places.length ? 'Find fresh suggestions' : 'Find places for me'}</button>{busy && <p className="modal-footnote" role="status">Checking your budget and looking up real places. You can keep exploring the app.</p>}{error && <p role="alert" className="form-error">{error}</p>}<LocationControl state={state} />
+      <button className="button primary full-width lf-find" disabled={busy || !connected || !state.agentEnabled} onClick={() => find()}>{busy ? 'Lila is finding a few options…' : places.length ? 'Find more places' : 'Find places for me'}</button>{busy && <p className="modal-footnote" role="status">Checking your budget and looking up real places. You can keep exploring the app.</p>}{error && <p role="alert" className="form-error">{error}</p>}<LocationControl state={state} />
     </section>
   </div>;
 }

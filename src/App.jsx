@@ -4,7 +4,7 @@ import { store, connected } from './lib/store.js';
 import TextDemo from './TextDemo.jsx';
 import InstallPocket from './InstallPocket.jsx';
 import { Home, Nearby, Setup, LocationControl, SmsLink, DemoArrival, Glow, LilaBrand, PlusButton, CategoryArt, inDisplayOrder, art } from './Experience.jsx';
-import { ChatScreen, VoiceScreen } from './Talk.jsx';
+import { ChatScreen, NOT_LOADED, VoiceScreen } from './Talk.jsx';
 import { DEFAULT_PROFILE } from './lib/preferences.js';
 
 const asset = name => `/figma/${name}`;
@@ -49,8 +49,6 @@ function CategoryIcon({ category, small = false }) {
 const NAV = [{ id: 'overview', label: 'Home', icon: 'nav-home-5f26e.svg' }, { id: 'nearby', label: 'Nearby', icon: 'nav-search-4c9cf.svg' }, { id: 'budgets', label: 'Budgets', icon: 'nav-pie-94c07.svg' }, { id: 'profile', label: 'Spending and profile', icon: 'nav-user-0c22b.svg' }];
 function initialPage() { const hash = window.location.hash.slice(1); return [...NAV.map(n => n.id), 'transactions', 'texts', 'activity', 'settings', 'chat', 'voice'].includes(hash) ? hash : 'overview'; }
 // Time of the newest logged message; a chat started now shows only messages after it.
-// Sorts after every timestamp, so nothing shows until the conversation has loaded.
-const NOT_LOADED = '￿';
 const lastMessageAt = state => (state.conversation || []).reduce((latest, m) => m.at && m.at > latest ? m.at : latest, '');
 
 export default function App() {
@@ -59,6 +57,8 @@ export default function App() {
   const [modal, setModal] = useState(null);
   const [toast, setToast] = useState('');
   const [filter, setFilter] = useState('all');
+  // A request for the Nearby screen (e.g. dinner within the daily dining allowance); cleared by any other navigation.
+  const [nearbyRequest, setNearbyRequest] = useState(null);
   const [search, setSearch] = useState('');
   // Set once the server's conversation has loaded, so a reload starts a fresh chat.
   const [chatSince, setChatSince] = useState(null);
@@ -69,9 +69,11 @@ export default function App() {
   useEffect(() => { if ((!connected || state.nessie) && !state.profile?.onboarded) setModal({ type: 'setup' }); }, [Boolean(state.nessie), state.profile?.onboarded]);
   const dining = budgets.find(b => b.id === 'dining');
   const mainRef = useRef(null);
+  // The launch screen in index.html covers the page until the app has rendered.
+  useEffect(() => { document.getElementById('splash')?.remove(); }, []);
   useEffect(() => { const handler = () => setPage(initialPage()); window.addEventListener('hashchange', handler); return () => window.removeEventListener('hashchange', handler); }, []);
   useEffect(() => { if (toast) { const id = setTimeout(() => setToast(''), 5000); return () => clearTimeout(id); } }, [toast]);
-  function navigate(id, category = 'all') { setPage(id); setFilter(category); setSearch(''); window.location.hash = id; mainRef.current?.focus({ preventScroll: true }); window.scrollTo({ top: 0, behavior: 'instant' }); }
+  function navigate(id, category = 'all', request = null) { setPage(id); setFilter(category); setNearbyRequest(request); setSearch(''); window.location.hash = id; mainRef.current?.focus({ preventScroll: true }); window.scrollTo({ top: 0, behavior: 'instant' }); }
   function complete(message) { setModal(null); setToast(message); }
   const warning = store.getWarning();
   const navItem = item => <a key={item.id} href={`#${item.id}`} aria-label={item.label} title={item.label} aria-current={page === item.id ? 'page' : undefined} className="lf-nav-item" onClick={e => { e.preventDefault(); navigate(item.id); }}><span><img src={art(item.icon)} alt="" /></span></a>;
@@ -87,8 +89,8 @@ export default function App() {
       {page === 'texts' && <><PageHeading title="Lila texts" subtitle="Make room for plans with friends." /><TextDemo state={state} /></>}
       {page === 'chat' && <ChatScreen state={state} navigate={navigate} since={chatSince ?? NOT_LOADED} />}
       {page === 'voice' && <VoiceScreen state={state} navigate={navigate} />}
-      {page === 'overview' && <Home state={state} navigate={navigate} onAdd={() => setModal({ type: 'expense' })} />}
-      {page === 'nearby' && <Nearby state={state} onAdd={() => setModal({ type: 'expense' })} />}
+      {page === 'overview' && <Home state={state} navigate={navigate} onAdd={() => setModal({ type: 'expense' })} onDinner={budgetCents => navigate('nearby', 'all', { budgetCents, ask: 'coffee shops and cafes' })} onCategory={id => { navigate('budgets'); setModal({ type: 'category', category: id }); }} />}
+      {page === 'nearby' && <Nearby state={state} request={nearbyRequest} onAdd={() => setModal({ type: 'expense' })} />}
       {page === 'profile' && <div className="lf-screen lf-profile">
         <Glow x={196} y={92} />
         <header className="lf-profile-head">

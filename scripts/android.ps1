@@ -50,7 +50,7 @@ $backendSession.Cookies.Add((New-Object System.Net.Cookie('pocket', $sessionCook
 $null = Invoke-RestMethod 'http://127.0.0.1:3002/api/state' -WebSession $backendSession
 $deviceOutput = & $adbPath devices
 Assert-Exit 'Device discovery'
-$devices = @($deviceOutput | Where-Object { $_ -match '^\S+\s+device$' } | ForEach-Object { ($_ -split '\s+')[0] })
+$devices = @($deviceOutput | Where-Object { $_ -match '^\S+\s+device\b' } | ForEach-Object { ($_ -split '\s+')[0] })
 if (!$Serial) {
     if ($devices.Count -ne 1) { throw 'Connect and unlock one Android phone, enable USB debugging, and accept its Allow USB debugging prompt. Use npm run android:devices to check.' }
     $Serial = $devices[0]

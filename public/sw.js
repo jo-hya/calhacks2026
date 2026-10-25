@@ -1,5 +1,5 @@
 // Cache only the offline notice. Never cache pairing URLs, budgets or mutations.
-const CACHE = 'pocket-offline-v1';
+const CACHE = 'lila-offline-v1';
 self.addEventListener('install', event => {
   event.waitUntil(caches.open(CACHE).then(cache => cache.add('/offline.html')).then(() => self.skipWaiting()));
 });
